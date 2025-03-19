@@ -30,10 +30,10 @@ if eye_tracking:
 #options
 n_trials = 28 # per block
 n_odd = 7  # per block
-n_catch = 13 # per section
+n_target = 14 # per block
 
-n_blocks = 15  # per section        
-n_sections = 2 # divides experiment into attended vs unattended sections 
+n_blocks = 30  # in total      
+
 
 #to check problem
 trigger_time_list = []
@@ -48,6 +48,10 @@ rng = np.random.default_rng(seed=None)
 # array with random jitter for horizontal stim lines (this might have to be a standard array as in the same for everyone)
 stim_jitter_path = os.getcwd()+'/stim_jitter.npy'
 linejitter_arr = np.load(stim_jitter_path)
+
+# images to show rotation direction
+anticlockwise_path = os.getcwd()+'/anticlockwise_arrow.png'
+clockwise_path = os.getcwd()+'/clockwise_arrow.png'
 
 ####################################################
 # Dialogue box
@@ -114,7 +118,7 @@ win.mouseVisible = False
 ####################################################
 
 cross_standard_col = 'white'
-catch_colour = 'red'
+target_colour = 'red'
 test_instruction = ('Test')
 start_instruction =[('Welcome and thank you for participating in this experiment.\n\n' + 
                      'Please press SPACE to continue.'),
@@ -154,6 +158,11 @@ teststim = ShapeStim(win, vertices=[(0.5,1.0), (1.0,1.0), (0.5,1.0), (1.0,1.0)],
 def generateStimCoordinates(gridcol, gridrow, jitter):
     """
     Generates coordinates used to draw the stimulus lines
+
+    Parameters:
+        gridcol (int): Number of columns in the grid.
+        gridrow (int): Number of rows in the grid.
+        jitter (ndarray): 30x30x2 array that adds variation to the grid coords.
     """
     # Calculate spacing of grid
     x_spacing = 1.0 / (gridcol)
@@ -197,14 +206,20 @@ def generateStimCoordinates(gridcol, gridrow, jitter):
 
 
 
-def generateStim(linelength, linewidth ,coord_array, size, fixdistance, slant):
+def generateStim(linelength, linewidth ,coord_array, size, fixdistance, slant_angle):
     """ 
-    Generate an ElementArrayStim object consisting of lines on the coordinates for stimulus for each quadrant
-    Then four more arrays are created each representing a catch trial in a separate quadrant
-    Returns a 5x4 array of lists with each list containing the line stimuli for a quadrant
-    If localizer is set to True then it generates a grid in the upper or lower visual field instead of quadrants
+    Generate an ElementArrayStim object consisting of lines on the coordinates 
+    for stimulus for each quadrant position and with differently angled lines
+
+    Parmeters:
+        linelength (int): length of individual lines (pix but can be any unit)
+        linewidth (int): width of individual lines (pix but can be any unit)
+        coord_array (ndarray): set of x and y coords for de sub elements
+        size (int or float): scaling factor
+        fixdistance (int or float): distance of stimulus corner to screen center
+        slant_angle (int): angle of the stimuli, two sets are generated: this angle and its complement 
     """
-    # 
+    # i.e. quadrants
     sections = 4
     # This is to calculate the distance to the fixation cross
     dist = np.sqrt(np.square(fixdistance)/2) #pythagoras
@@ -214,8 +229,8 @@ def generateStim(linelength, linewidth ,coord_array, size, fixdistance, slant):
     gridcol = np.shape(coord_array)[0]
     gridrow = np.shape(coord_array)[1]
 
-    # Init arrays to store line objects per quadrant and also for every possible catch trial 
-    line_stimuli = np.empty((2,sections), dtype=object)   # 2 types (0 is normal white lines, 1 is catch stim ) and 4 quadrants
+    # Init arrays to store line objects per quadrant and also for two differny line angles
+    line_stimuli = np.empty((2,sections), dtype=object)   # 2 types (0 is left slanted, 1 is right slanted ) and 4 quadrants
  
     for quad in range(sections):
         n_lines = gridcol*gridrow
@@ -232,10 +247,12 @@ def generateStim(linelength, linewidth ,coord_array, size, fixdistance, slant):
                 xys[it_count,1] = the_y
                 it_count += 1
         sizes = np.atleast_2d([linelength,linewidth]).repeat(repeats=n_lines, axis=0)
-        # Normal stimuli
-        line_stimuli[0,quad] = visual.ElementArrayStim(win, units='pix',elementTex=None, elementMask='sqr', xys= xys, oris = slant,
+        # Left slanted stimuli
+        line_stimuli[0,quad] = visual.ElementArrayStim(win, units='pix',elementTex=None, elementMask='sqr', xys= xys, oris = 360-slant_angle,
                                            nElements=n_lines, sizes=sizes, colors=(1.0, 1.0, 1.0), colorSpace='rgb')
-
+        # Right slanted stimuli
+        line_stimuli[1,quad] = visual.ElementArrayStim(win, units='pix',elementTex=None, elementMask='sqr', xys= xys, oris = slant_angle,
+                                           nElements=n_lines, sizes=sizes, colors=(1.0, 1.0, 1.0), colorSpace='rgb')
 
     return line_stimuli
 
@@ -244,19 +261,318 @@ def generateStim(linelength, linewidth ,coord_array, size, fixdistance, slant):
 #Trial display functions
 ####################################################
 
-
-def drawStim(line_stimuli, quad, catch):
+def drawStim(line_stimuli, quad, slant):
     """ 
     Draws the stimuli in the correct quadrant
-    Catch = 0 means normal color catch = 1 means catch
+    Parmeters:
+        line_stimuli (ndarray): array with psychopy ElementArrayStim objects for every position and slant
+        quad (int): quadrant 0,1,2 or 3
+        slant (0 or 1): left slanted (0) or right slanted (1)
     """
-    # Evaluate the task and make the apropriate catch
+    # Select the stimulus for the quadrant and slant
+    line_stim = line_stimuli[slant,quad]
 
-    line_stim = line_stimuli[0,quad]
-    if catch:
-        cross.color = catch_colour 
     # Draw 
     line_stim.draw()
+
+
+def stimPresentation(stimulus, stim_dur, isi_dur,iti_dur, start_quad, direction, q_target, slant, lab=lab): 
+    """
+    Stimulus presentation for a single trial
+    Parmeters:
+        stimulus (ndarray): array with psychopy ElementArrayStim objects for every position and slant
+        stim_dur (float): stimulus presentation duration in seconds
+        isi_dur (float): inter-stimulus intervalin seconds
+        iti_dur (float): inter-trial interval in seconds
+        start_quad (int): position of the first stimulus in the sequence 0,1,2 or 3
+        direction (0 or 1): direction of the sequence clockwise (0) or anticlockwise (1)
+        q_target (int): determines the moment (which quad) of a target (1,2,3,4) quadrant if there is a no target (0) 
+        slant (list): of 1 and 0 left slanted (0) or right slanted (1)
+        lab (str): determines EEG aspects such as port and trigger
+    """
+    # Check timing
+    stim_clock = core.Clock()
+    trial_clock = core.Clock()
+    stim_times = []
+    stimpos_ls = np.roll(np.arange(4), -start_quad, axis=0)   # select the starting point of the stimulus
+    # This is to select the presentation direction
+    dir_list = np.arange(4)
+    if direction == 0:
+        stimpos_ls = np.roll(dir_list, -start_quad, axis=0)   # select the starting point of the stimulus
+    elif direction == 1:
+        stimpos_ls = np.roll(dir_list[::-1], 1+start_quad, axis=0)   # select the starting point of the stimulus and reverse direction
+    
+    # This is for the target trials
+    target_ls = np.zeros(4,dtype=int) 
+    if not q_target == 0:
+        target_ls[q_target] = 1  
+
+
+    # Send trial start trigger
+    eegTriggerSend(int(99),lab)
+    # Trial procedure
+    for i,stimpos in enumerate(stimpos_ls):
+        win.flip()
+        stim_clock.reset()
+        if target_ls[i]:
+            cross.color = target_colour 
+        # Implemenent a target trial
+        trigger = int(selectEEGStimulusTrigger(stimpos,pos=i)) # EEG trigger generation
+        drawStim(stimulus,stimpos,slant[i])
+        wait = isi_dur[i]-stim_clock.getTime()      # Drawing the stimulus takes time, this compensates that
+        core.wait(wait)
+        stim_timing =trial_clock.getTime() * 1000
+        win.flip()
+        eegTriggerSend(trigger,lab)  # Send trigger
+        core.wait(stim_dur)
+        win.flip()
+        cross.color = cross_standard_col
+        stim_times.append(stim_timing)
+
+    trial_time = trial_clock.getTime()*1000
+    core.wait(iti_dur)
+    return stim_times, trial_time
+
+
+def displayMessage(msg= None, block_msg = False, lang= 0, block_num = None, hits = None, misses = None, wrong = None):
+    """ 
+    Function to display instruction, score and other text
+    Parmeters:
+        msg (str): message to display
+        block_msg (bool): whether it is a message in between blocks
+        lang (int): intruction language
+        block_num (int): the block number
+        hits (int): particpant amount of hits
+        missed (int): particpant amount of misses
+        wrong (int): particpant amount of errors
+    """
+    message.text = msg
+    if block_msg:
+        if block_num == 1:
+            lang_bl_instr = [('Block 1\n\n Press SPACE to start the main experiment.'),
+                             ('Blok 1\n\n Druk op SPATIE om te beginnen met het hoofdexperiment.')]
+        else:
+            lang_bl_instr = [(f'Block {block_num} \n\n Hits: {hits}\nMisses: {misses}\nWrong/too slow: {wrong}' +
+                            '\n\nYou can take a quick break if you want. \n\n Press SPACE to continue the experiment.'),
+                            (f'Blok {block_num} \n\n Raak: {hits}\nGemist: {misses}\nVerkeerd/te laat: {wrong}' +
+                            '\n\n Je kan nu een korte pauze nemen. \n\n Druk op SPATIE om met het experiment verder te doen.')]
+        message.text = lang_bl_instr[lang]
+
+    message.draw()
+    win.flip()
+
+    start_key = event.waitKeys(keyList = ['space','escape'])
+    if start_key == 'escape':
+        if eye_tracking:
+            terminate_task()
+        core.quit() #no event.clearEvents() necessary
+        win.close()
+    event.clearEvents()
+
+
+def displayRotationInstruction():
+    
+    top_instr = visual.TextStim(win, text='Respond to the rotation direction when the cross turns red',pos=(0,200),height= 30) 
+    left_instr = visual.TextStim(win, text='Press D',pos=(-200,-150),height= 30) 
+    right_instr = visual.TextStim(win, text='Press K',pos=(200,-150),height= 30) 
+    bottom_instr = visual.TextStim(win, text='Press SPACE to continue',pos=(0,-280),height= 30) 
+
+    clockwise_image = visual.ImageStim(win,image=clockwise_path,units='pix',pos=(-200,-30),size=200)
+    anticlockwise_image = visual.ImageStim(win,image=anticlockwise_path,units='pix',pos=(200,-30),size=200)
+    top_instr.draw()
+    left_instr.draw()
+    right_instr.draw()
+    clockwise_image.draw() 
+    anticlockwise_image.draw() 
+    bottom_instr.draw()
+
+    win.flip()
+
+    start_key = event.waitKeys(keyList = ['space','escape'])
+    if start_key == 'escape':
+        if eye_tracking:
+            terminate_task()
+        core.quit() #no event.clearEvents() necessary
+        win.close()
+    event.clearEvents()
+
+
+def displayAngleInstruction():
+    
+    top_instr = visual.TextStim(win, text='Respond to the angle of the lines when the cross turns red',pos=(0,200),height= 30) 
+    left_instr = visual.TextStim(win, text='Press D',pos=(-200,-150),height= 30) 
+    right_instr = visual.TextStim(win, text='Press K',pos=(200,-150),height= 30) 
+    bottom_instr = visual.TextStim(win, text='Press SPACE to continue',pos=(0,-280),height= 30) 
+
+    left_slant_bar = visual.Rect(win,width=120,height=20,fillColor ='white',units='pix',pos=(-200,-30),ori=45)
+    right_slant_bar = visual.Rect(win,width=120,height=20,fillColor ='white',units='pix',pos=(200,-30),ori=315)
+    top_instr.draw() 
+    left_instr.draw()
+    right_instr.draw()
+    left_slant_bar.draw() 
+    right_slant_bar.draw() 
+    bottom_instr.draw()
+
+    win.flip()
+
+    start_key = event.waitKeys(keyList = ['space','escape'])
+    if start_key == 'escape':
+        if eye_tracking:
+            terminate_task()
+        core.quit() #no event.clearEvents() necessary
+        win.close()
+    event.clearEvents()
+
+####################################################
+#Trial sequence functions
+####################################################
+
+def generatePredictionList(tr_block, n_odd, mode = 'rotation'):
+    """ 
+    Generate pseudo randomized properties of trial direction or stimulus angle on a block level
+    Parameters:
+        tr_block (int):number of trials per block
+        n_odd (int): number of odd per block
+        mode (str): indentifies whether it is trial level ('rotation) or stimulus ('angle') 
+    """
+    # Check if there are correct amount of odds
+    if n_odd > tr_block/2:
+        raise ValueError("Invalid input parameters")
+    # Multiple the trial and odd var by 4 because there are 4 stimuli per trial
+    if mode == 'angle': 
+        n_odd = n_odd*4
+        tr_block = tr_block*4
+
+    prediction_arr = np.zeros(tr_block , dtype=int)
+    possible_positions = np.arange(tr_block)
+    # Randomly select positions for 1's, ensuring no two are consecutive
+    selected_positions = []
+    while len(selected_positions) < n_odd:
+        pos = np.random.choice(possible_positions)
+        selected_positions.append(pos)
+        # Remove the selected position and its adjacent positions to prevent consecutive 1's
+        possible_positions = possible_positions[(possible_positions < pos - 1) | (possible_positions > pos + 1)]
+        
+    prediction_arr[selected_positions] = 1
+    return prediction_arr
+
+
+def generateTrialStarts(tr_block,bad_quadrant):
+    """
+    Generate a list with the start positions for each block depending on the localised quadrant set
+    Parameters:
+        tr_block (int):number of trials per block
+        bad_quadrant (int): the quadrant that we want to exclude based on localiser (0,1,2,3)
+    """
+    quad_li = np.arange(4)
+    # You have two diametric quadrants of interest
+    quad_a = quad_li[bad_quadrant]
+    quad_b = quad_li[(bad_quadrant +2)%4]
+    # Create the arrays
+    half_blocks = int(np.ceil(tr_block/2))
+    aquad_arr = np.full(half_blocks,quad_a)
+    bquad_arr = np.full(half_blocks,quad_b)
+    
+    section_blocks = np.concatenate((aquad_arr,bquad_arr))
+    np.random.shuffle(section_blocks)
+    block_list =  section_blocks[:tr_block]
+
+    return block_list
+
+
+def generateTargetTrials(tr_block, ntarget):
+    """ 
+    Some trials are target trials, this function generates a list to designate which trials are
+    Parameters:
+        tr_block (int):number of trials per block
+        ntarget (int): number of target trials
+    """
+    # Make a list with normal trials (0) and a list with target trials (1)
+    full_list = np.zeros(tr_block-ntarget,dtype=int)
+    c_list = np.ones(ntarget*3,dtype=int) # make a longer list and cut it short otherwise it won't work with ntarget <3
+    for i,one in enumerate(c_list):
+        c_list[i] = int(one + i%3)   # Just adding 0,1, or 2  to every element (again: if ntarget is divisible by 3 then it's balanced)
+    # Make correct length
+    np.random.shuffle(c_list)
+    c_list = c_list[:ntarget]
+
+    # Make one list
+    full_list = np.append(full_list,c_list)
+    # Shuffle
+    np.random.shuffle(full_list)
+
+    return full_list
+
+
+def generateTrialTimings(tr_block,isi_dur, jitter,randng=rng):
+    """ 
+    Generate a list of timings 4 per trial
+    Parameters:
+        tr_block (int):number of trials per block
+        isi_dur (float): mean duration of isi
+        jitter (float): variation on isi duration
+        randng (np Generator class): random number generator
+    """
+    block_tlist= []
+    for i in range(tr_block):
+        trial_tlist = []
+        for p in range(4):
+            stim_t = isi_dur + randng.uniform(low =-jitter,high=jitter)
+            trial_tlist.append(stim_t)
+        block_tlist.append(trial_tlist)
+    return block_tlist
+
+def generateBlockLevels(nblocks: int,):
+    """ 
+    Generate list with half half zeros and another half ones for any block level parameter
+    The attention conditions, which direction is odd or which angle is odd
+    Parameters:
+        nblocks (int): amont of blocks
+    """
+    # Make a list with normal trials (0) and a list with target trials (1)
+    half_block = int(np.ceil(nblocks/2))
+    cond_1 = np.full(half_block,0,dtype=int)
+    cond_2 = np.full(half_block,1,dtype=int)
+    full_cond = np.concatenate([cond_1,cond_2]) 
+    np.random.shuffle(full_cond)
+    cond_list = full_cond[:nblocks]
+    return cond_list
+
+
+####################################################
+#External measurement instruments
+####################################################
+
+
+def eegTriggerSend(eeg_trigger, lab): #need to elaborate
+    """
+    Sends trigger to EEG recording
+    """
+    if not lab == 'none':
+        gsr_port.setData(eeg_trigger)
+        core.wait(0.01)
+        gsr_port.setData(0)
+    else:
+        print(eeg_trigger)
+        trigger_time_list.append([core.getTime(),eeg_trigger])
+
+
+def selectEEGStimulusTrigger(start,pos):
+    """
+    distinguish EEG trigger for stimulus
+    """
+    eeg_stim_trigger = int((start+1)*10 + (pos+1))
+
+    return eeg_stim_trigger
+
+
+#just setting up the EEG
+if lab == 'actichamp':
+    gsr_port = parallel.ParallelPort(address=0xCFB8)
+elif lab == 'biosemi':
+    gsr_port = parallel.ParallelPort(address=0x3FB8)
+
+
 
 ####################################################
 #Experiment value initialization
@@ -265,20 +581,28 @@ def drawStim(line_stimuli, quad, catch):
 # Generate main stimuli
 grid = generateStimCoordinates(gridcol=12, gridrow=10, jitter=linejitter_arr)
 stimset = generateStim(linelength=35,linewidth=2, coord_array=grid,
-                        size=276, fixdistance=134,slant=30)
+                        size=276, fixdistance=134,slant_angle=45)
+ 
+block_rot_pred = generatePredictionList(tr_block=n_trials,n_odd=n_odd,mode='rotation')
+block_angle_pred = generatePredictionList(tr_block=n_trials,n_odd=n_odd,mode='angle')
+trial_starts = generateTrialStarts(tr_block=n_trials,bad_quadrant=0)
+target_trials = generateTargetTrials(tr_block=n_trials,ntarget=n_target)
+trial_timings = generateTrialTimings(tr_block=n_trials,isi_dur=isi_duration,jitter=stim_onset_jitter)
 
+for i in range(n_trials):
 
-
-while True:
+    # displayAngleInstruction()
+    # displayRotationInstruction()
     win.flip()
-    drawStim(line_stimuli=stimset,quad=0,catch=0)
+    cross.autoDraw = True
+    stimPresentation(stimulus=stimset,stim_dur=stim_duration,isi_dur=trial_timings[i],
+                     iti_dur=iti_duration,start_quad=trial_starts[i],
+                     direction=block_rot_pred[i],q_target=target_trials[i],slant=block_angle_pred[i:i+4])
     keys = event.getKeys()
-    # If the spacebar is pressed, break the loop
-    if 'space' in keys:
+    if 'escape' in keys:
         break
-    # Add a small delay to avoid high CPU usage
-    core.wait(0.01)
-# Close the window
+    event.clearEvents(eventType = 'keyboard')
+
 
 win.close()
 core.quit()
