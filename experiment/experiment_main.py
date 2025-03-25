@@ -20,7 +20,7 @@ from math import fabs
 
 lab = 'none'   #'actichamp'/'biosemi'/'none'
 
-mode = 'test'   #'default'/'test'
+mode = 'default'   #'default'/'test'
 
 eye_tracking = False #True/False
 
@@ -121,9 +121,9 @@ win.mouseVisible = False
 cross_standard_col = 'white'
 target_colour = 'red'
 test_instruction = ('Test')
-start_instruction =[('Welcome and thank you for participating in this experiment.\n\n' + 
+start_instruction = [('Welcome and thank you for participating in this experiment.\n\n' + 
                      'Please press SPACE to continue.'),
-                    ('Welkom en bedankt om deel te nemen aan dit experiment.\n\n' +
+                     ('Welkom en bedankt om deel te nemen aan dit experiment.\n\n' +
                      'Druk op SPATIE om verder te gaan.')]
 
 stim_rotation_instr = [('Respond to the rotation direction when the cross turns red'),
@@ -138,15 +138,15 @@ press_k_instr = [('Press the \'k\'-key'),
                  ('Druk op de \'k\'-toets')]
 
 cue_rotation_instr = [('In the majority of the time the lines will rotate in this direction'),
-                    ('In het grootste deel van de tijd zullen de lijntjes in deze richting roteren')]
+                      ('In het grootste deel van de tijd zullen de lijntjes in deze richting roteren')]
 cue_angle_instr = [('In the majority of the time the lines will have this angle'),
-                 ('In het grootste deel van de tijd zullen de lijntjes deze hoek hebben')]
+                   ('In het grootste deel van de tijd zullen de lijntjes deze hoek hebben')]
 
 eye_tracking_instr = [('Please wait for the recalibration of the eye tracker.'),
                       ('Even geduld voor de recalibratie van de eye tracker.')]
 
 space_instr = [('Press SPACE to continue'),
-                            ('Druk op SPATIE om verder te doen')]
+               ('Druk op SPATIE om verder te doen')]
 
 message = visual.TextStim(win, text='',height= 30) 
 
@@ -214,7 +214,6 @@ def generateStimCoordinates(gridcol, gridrow, jitter):
         coord_array[:,:,:,i] =  coord_array[:,:,:,i] + jitter[:gridcol,:gridrow,:]
   
     return coord_array
-
 
 
 def generateStim(linelength, linewidth ,coord_array, size, fixdistance, slant_angle):
@@ -300,6 +299,10 @@ def stimPresentation(stimulus, stim_dur, isi_dur,iti_dur, start_quad, direction,
         q_target (int): determines the moment (which quad) of a target (1,2,3,4) quadrant if there is a no target (0) 
         slant (list): of 1 and 0 left slanted (0) or right slanted (1)
         lab (str): determines EEG aspects such as port and trigger
+    Return:
+        stim_times (ndarray): length of 4 with times of stim presentation
+        trial_time (float): duration of the trial
+        triggers (ndarray): the EEG triggers
     """
     # Check timing
     stim_clock = core.Clock()
@@ -319,7 +322,6 @@ def stimPresentation(stimulus, stim_dur, isi_dur,iti_dur, start_quad, direction,
     if not q_target == 0:
         target_ls[q_target] = 1  
 
-
     # Send trial start trigger
     eegTriggerSend(int(99),lab)
     # Trial procedure
@@ -332,22 +334,23 @@ def stimPresentation(stimulus, stim_dur, isi_dur,iti_dur, start_quad, direction,
         trigger = int(selectEEGStimulusTrigger(stimpos,pos=i)) # EEG trigger generation
         triggers.append(trigger)
         drawStim(stimulus,stimpos,slant[i])
-        wait = isi_dur[i]-stim_clock.getTime()      # Drawing the stimulus takes time, this compensates that
+        wait = isi_dur[i]-stim_clock.getTime() # Drawing the stimulus takes time, this compensates that
         core.wait(wait)
-        stim_timing =trial_clock.getTime() * 1000
+        stim_timing =trial_clock.getTime()*1000
         win.flip()
-        eegTriggerSend(trigger,lab)  # Send trigger
+        eegTriggerSend(trigger,lab) # Send trigger
         core.wait(stim_dur)
         win.flip()
         cross.color = cross_standard_col
+        print(stim_timing)
         stim_times.append(stim_timing)
 
     trial_time = trial_clock.getTime()*1000
     core.wait(iti_dur)
-    return stim_times, trial_time, triggers
+    return stim_times, trial_time, triggers, stimpos_ls
 
 
-def displayMessage(msg= None, block_msg = False, lang= 0, block_num = None, hits = None, misses = None, wrong = None, break_blocks = None):
+def displayMessage(msg=None, block_msg=False, lang=0, block_num=None, hits=None, misses=None, wrong=None, break_blocks=None):
     """ 
     Function to display instruction, score and other text
     Parmeters:
@@ -380,9 +383,8 @@ def displayMessage(msg= None, block_msg = False, lang= 0, block_num = None, hits
 
     message.draw()
     win.flip()
-
     start_key = event.waitKeys(keyList = ['space','escape'])
-    if start_key == 'escape':
+    if start_key[0] == 'escape':
         if eye_tracking:
             terminate_task()
         core.quit() #no event.clearEvents() necessary
@@ -390,7 +392,7 @@ def displayMessage(msg= None, block_msg = False, lang= 0, block_num = None, hits
     event.clearEvents()
 
 
-def displayCondInstruction(cond, key_map, lang = 0):
+def displayCondInstruction(cond, key_map, lang=0):
     """ 
     Function for displaying block task
     Parameters:
@@ -431,9 +433,7 @@ def displayCondInstruction(cond, key_map, lang = 0):
     cond_im_1.draw() 
     cond_im_2.draw() 
     bottom_instr.draw()
-
     win.flip()
-
     start_key = event.waitKeys(keyList = ['space','escape'])
     if start_key[0] == 'escape':
         if eye_tracking:
@@ -442,7 +442,7 @@ def displayCondInstruction(cond, key_map, lang = 0):
         win.close()
     event.clearEvents()
 
-def displayBlockCue(cond, rot_odd, ang_odd, lang = 0):
+def displayBlockCue(cond, rot_odd, ang_odd, lang=0):
     """ 
     Function for displaying block cue
     Parameters:
@@ -481,7 +481,7 @@ def displayBlockCue(cond, rot_odd, ang_odd, lang = 0):
 #Trial sequence functions
 ####################################################
 
-def generatePredictionList(tr_block, n_odd, odd, mode = 'rotation'):
+def generatePredictionList(tr_block, n_odd, odd, mode='rotation'):
     """ 
     Generate pseudo randomized properties of trial direction or stimulus angle on a block level
     Parameters:
@@ -583,7 +583,7 @@ def generateTrialTimings(tr_block,isi_dur, jitter,randng=rng):
         block_tlist.append(trial_tlist)
     return block_tlist
 
-def generateBlockLevels(nblocks: int,):
+def generateBlockLevels(nblocks: int):
     """ 
     Generate list with half half zeros and another half ones for any block level parameter
     The attention conditions, which direction is odd or which angle is odd
@@ -654,12 +654,13 @@ elif lab == 'biosemi':
 #Experiment value initialization
 ####################################################
 
-# Participant specific values
+# Condition mapping
 rotodd_map = ['clockwise','anticlockwise']
 angodd_map = ['left','right']
 key_map = [['k','d'],['d','k']]
+position_map = ['top_left','top_right','bottom_right','bottom_left']
 
-# Counterbalancing and key-mapppig
+# Counterbalancing and key-mappping
 subject_code = participantCounterBalance(2)  
 rotation_odd = rotodd_map[subject_code[0]] # index 0 idicate which direction is odd
 angle_odd = angodd_map[subject_code[1]] # index 1 indicates which angle is odd
@@ -737,11 +738,47 @@ for id in range(n_blocks):
     for i in range(n_trials): 
         cross.autoDraw = True
         win.flip()
-        stimPresentation(stimulus=stimset,stim_dur=stim_duration,isi_dur=trial_timings[id][i],
-                        iti_dur=iti_duration,start_quad=trial_starts[id][i],
-                        direction=block_rot_pred[id][i],q_target=target_trials[id][i],slant=block_angle_pred[id][i:i+4])
+        trial_clock.reset() #start rt timing
+        stimulus_times,trial_stamp,triggers,stimpos = stimPresentation(stimulus=stimset,stim_dur=stim_duration,isi_dur=trial_timings[id][i],
+                                                                       iti_dur=iti_duration,start_quad=trial_starts[id][i],direction=block_rot_pred[id][i],
+                                                                       q_target=target_trials[id][i],slant=block_angle_pred[id][i:i+4])
+        event.clearEvents(eventType = 'keyboard')
         keys = event.getKeys(timeStamped=trial_clock)
         print(keys)
+        t_trial = trial_clock.getTime()*1000
+
+        # Store data
+        for ix in range(4):
+            trials.addData('LocalTime_DDMMYY_HMS', 
+                        str(time.localtime()[2]) + '/' + str(time.localtime()[1]) + '/' + str(time.localtime()[0]) 
+                        + '_' + str(time.localtime()[3]) + ':' + str(time.localtime()[4]) + ':' + str(time.localtime()[5])) #HMS = hour min sec
+            trials.addData('lab', lab)
+            trials.addData('mode', mode)
+            trials.addData('eye_tracking', eye_tracking)
+            trials.addData('participant', 'test')
+            trials.addData('gender', info['Gender'])
+            trials.addData('age', info['Age'])
+            trials.addData('handed', info['Dominant hand'])
+            trials.addData('intruct_lang', info['Language'])
+            # trials.addData('loc_quad', )
+            trials.addData('trial', (trial_count)) # Python starts indexing at 0
+            trials.addData('start_position',trial_starts[id][i])
+            trials.addData('rotation_odd', rotation_odd)
+            trials.addData('angle_odd', angle_odd)
+            trials.addData('angle',angodd_map[block_angle_pred[id][i:i+4][ix]])
+            trials.addData('trial_direction',rotodd_map[block_rot_pred[id][i]])
+            trials.addData('catch_trial',target_trials[id][i])
+            trials.addData('t_stim',stimulus_times[ix])
+            trials.addData('position',position_map[stimpos[ix]])
+            trials.addData('sequence',ix)
+            trials.addData('eeg_trigger',triggers[ix])
+            trials.addData('experiment_time_s',exp_clock.getTime())
+            trials.addData('t_trial',t_trial)
+            trials.addData('block',block_count)
+            if not mode == 'test':this_exp.nextEntry()
+
+        trial_count+= 1
+        trial_index+= 1
         # Terminate if escape is pressed
         if len(keys)>= 1:
             if keys[-1][0] == 'escape':
@@ -750,6 +787,7 @@ for id in range(n_blocks):
                     terminate_task()
                 win.close()
                 core.quit()
+    block_count+= 1
 
 win.close()
 core.quit()
