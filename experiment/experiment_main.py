@@ -28,11 +28,11 @@ if eye_tracking:
     from EyeLinkCoreGraphicsPsychoPy import EyeLinkCoreGraphicsPsychoPy #this are functions used to run the eyetracker calibration and validation
 
 #options
-n_trials = 28 # per block
-n_odd = 7  # per block
-n_target = 14 # per block
+n_trials = 4 # per block
+n_odd = 1  # per block
+n_target = 2 # per block
 
-n_blocks = 30  # in total      
+n_blocks = 4  # in total      
 
 
 #to check problem
@@ -57,7 +57,6 @@ clockwise_path = os.getcwd()+'/clockwise_arrow.png'
 # Dialogue box
 ####################################################
 
-language = 'English' # default
 
 info =  {'Gender': ['Male','Female', 'X'],'Language':['English','Dutch'], 
          'Age': '', 'Dominant hand':['left','right','ambi'],
@@ -85,6 +84,8 @@ while already_exists and mode != 'test':   #keep asking for a new name when the 
 ####################################################
 # System settings and input transformation
 ####################################################
+
+language = 0 # default
 if mode != 'test':   
     # Language selection
     lang_map = {'English':0 , 'Dutch':1}
@@ -125,17 +126,27 @@ start_instruction =[('Welcome and thank you for participating in this experiment
                     ('Welkom en bedankt om deel te nemen aan dit experiment.\n\n' +
                      'Druk op SPATIE om verder te gaan.')]
 
-stim_attend_instr = [('.'),
-                     ('.')]
+stim_rotation_instr = [('Respond to the rotation direction when the cross turns red'),
+                       ('Reageer op de rotatie richting wanneer het kruis rood wordt')]
 
-stim_unattend_instr = [('.'),
-                       ('.')]
+stim_angle_instr = [('Respond to the angle of the lines when the cross turns red'),
+                    ('Reageer op de hoek van de lijntjes wanneer het kruis rood wordt')]
+
+press_d_instr = [('Press the \'d\'-key'),
+                 ('Druk op de \'d\'-toets')]
+press_k_instr = [('Press the \'k\'-key'),
+                 ('Druk op de \'k\'-toets')]
+
+cue_rotation_instr = [('In the majority of the time the lines will rotate in this direction'),
+                    ('In het grootste deel van de tijd zullen de lijntjes in deze richting roteren')]
+cue_angle_instr = [('In the majority of the time the lines will have this angle'),
+                 ('In het grootste deel van de tijd zullen de lijntjes deze hoek hebben')]
 
 eye_tracking_instr = [('Please wait for the recalibration of the eye tracker.'),
                       ('Even geduld voor de recalibratie van de eye tracker.')]
 
-eye_tracking_pauze_instr = [('Press SPACE to continue the experiment.'),
-                            ('Druk op SPATIE om verder te doen met het experiment')]
+space_instr = [('Press SPACE to continue'),
+                            ('Druk op SPATIE om verder te doen')]
 
 message = visual.TextStim(win, text='',height= 30) 
 
@@ -294,6 +305,7 @@ def stimPresentation(stimulus, stim_dur, isi_dur,iti_dur, start_quad, direction,
     stim_clock = core.Clock()
     trial_clock = core.Clock()
     stim_times = []
+    triggers = []
     stimpos_ls = np.roll(np.arange(4), -start_quad, axis=0)   # select the starting point of the stimulus
     # This is to select the presentation direction
     dir_list = np.arange(4)
@@ -318,6 +330,7 @@ def stimPresentation(stimulus, stim_dur, isi_dur,iti_dur, start_quad, direction,
             cross.color = target_colour 
         # Implemenent a target trial
         trigger = int(selectEEGStimulusTrigger(stimpos,pos=i)) # EEG trigger generation
+        triggers.append(trigger)
         drawStim(stimulus,stimpos,slant[i])
         wait = isi_dur[i]-stim_clock.getTime()      # Drawing the stimulus takes time, this compensates that
         core.wait(wait)
@@ -331,10 +344,10 @@ def stimPresentation(stimulus, stim_dur, isi_dur,iti_dur, start_quad, direction,
 
     trial_time = trial_clock.getTime()*1000
     core.wait(iti_dur)
-    return stim_times, trial_time
+    return stim_times, trial_time, triggers
 
 
-def displayMessage(msg= None, block_msg = False, lang= 0, block_num = None, hits = None, misses = None, wrong = None):
+def displayMessage(msg= None, block_msg = False, lang= 0, block_num = None, hits = None, misses = None, wrong = None, break_blocks = None):
     """ 
     Function to display instruction, score and other text
     Parmeters:
@@ -345,12 +358,19 @@ def displayMessage(msg= None, block_msg = False, lang= 0, block_num = None, hits
         hits (int): particpant amount of hits
         missed (int): particpant amount of misses
         wrong (int): particpant amount of errors
+        break_blocks (list of int): the block where we include a longer break
     """
     message.text = msg
     if block_msg:
         if block_num == 1:
             lang_bl_instr = [('Block 1\n\n Press SPACE to start the main experiment.'),
                              ('Blok 1\n\n Druk op SPATIE om te beginnen met het hoofdexperiment.')]
+        elif block_num in break_blocks:
+            lang_bl_instr = [(f'You can now take a longer break if you want.\n\n'  + 
+                            f'Block {block_num} \n\n Hits: {hits}\nMisses: {misses}\nWrong/too slow: {wrong}' +
+                            '\n\n Press SPACE to start recalibration.'),
+                            (f'Blok {block_num} \n\n Raak: {hits}\nGemist: {misses}\nVerkeerd/te laat: {wrong}' +
+                            '\n\n Je kan nu een langere pauze nemen. \n\n Druk op SPATIE om opnieuw te calibreren.')]
         else:
             lang_bl_instr = [(f'Block {block_num} \n\n Hits: {hits}\nMisses: {misses}\nWrong/too slow: {wrong}' +
                             '\n\nYou can take a quick break if you want. \n\n Press SPACE to continue the experiment.'),
@@ -370,70 +390,107 @@ def displayMessage(msg= None, block_msg = False, lang= 0, block_num = None, hits
     event.clearEvents()
 
 
-def displayRotationInstruction():
-    
-    top_instr = visual.TextStim(win, text='Respond to the rotation direction when the cross turns red',pos=(0,200),height= 30) 
-    left_instr = visual.TextStim(win, text='Press D',pos=(-200,-150),height= 30) 
-    right_instr = visual.TextStim(win, text='Press K',pos=(200,-150),height= 30) 
-    bottom_instr = visual.TextStim(win, text='Press SPACE to continue',pos=(0,-280),height= 30) 
+def displayCondInstruction(cond, key_map, lang = 0):
+    """ 
+    Function for displaying block task
+    Parameters:
+        cond (int): condition 0 -> rotation task, 1 -> angle task
+        key_map (dict): key mappings
+        lang (int): instruction 0 -> eng, 1 -> dutch 
+    """
+    left_instr = visual.TextStim(win, text=press_d_instr[lang],pos=(-200,-150),height= 30) 
+    right_instr = visual.TextStim(win, text=press_k_instr[lang],pos=(200,-150),height= 30) 
+    bottom_instr = visual.TextStim(win, text=space_instr[lang],pos=(0,-280),height= 30) 
 
-    clockwise_image = visual.ImageStim(win,image=clockwise_path,units='pix',pos=(-200,-30),size=200)
-    anticlockwise_image = visual.ImageStim(win,image=anticlockwise_path,units='pix',pos=(200,-30),size=200)
-    top_instr.draw()
-    left_instr.draw()
-    right_instr.draw()
-    clockwise_image.draw() 
-    anticlockwise_image.draw() 
-    bottom_instr.draw()
+    if key_map['clockwise'] == 'd':
+        clock_wpos = (-200,-30)
+        anticlock_wpos = (200,-30)
+    else:
+        clock_wpos = (200,-30)
+        anticlock_wpos = (-200,-30)
 
-    win.flip()
+    if key_map['left'] == 'd':
+        left_wpos = (-200,-30)
+        right_wpos = (200,-30)
+    else:
+        left_wpos = (200,-30)
+        right_wpos = (-200,-30)
+ 
+    if cond:
+        top_instr = visual.TextStim(win, text=stim_rotation_instr[lang],pos=(0,200),height= 30) 
+        cond_im_1 = visual.ImageStim(win,image=clockwise_path,units='pix',pos=clock_wpos,size=200)
+        cond_im_2 = visual.ImageStim(win,image=anticlockwise_path,units='pix',pos=anticlock_wpos,size=200)
+    else:
+        top_instr = visual.TextStim(win, text=stim_angle_instr[lang],pos=(0,200),height= 30) 
+        cond_im_1 = visual.Rect(win,width=120,height=20,fillColor ='white',units='pix',pos=left_wpos,ori=45)
+        cond_im_2 = visual.Rect(win,width=120,height=20,fillColor ='white',units='pix',pos=right_wpos,ori=315)
 
-    start_key = event.waitKeys(keyList = ['space','escape'])
-    if start_key == 'escape':
-        if eye_tracking:
-            terminate_task()
-        core.quit() #no event.clearEvents() necessary
-        win.close()
-    event.clearEvents()
-
-
-def displayAngleInstruction():
-    
-    top_instr = visual.TextStim(win, text='Respond to the angle of the lines when the cross turns red',pos=(0,200),height= 30) 
-    left_instr = visual.TextStim(win, text='Press D',pos=(-200,-150),height= 30) 
-    right_instr = visual.TextStim(win, text='Press K',pos=(200,-150),height= 30) 
-    bottom_instr = visual.TextStim(win, text='Press SPACE to continue',pos=(0,-280),height= 30) 
-
-    left_slant_bar = visual.Rect(win,width=120,height=20,fillColor ='white',units='pix',pos=(-200,-30),ori=45)
-    right_slant_bar = visual.Rect(win,width=120,height=20,fillColor ='white',units='pix',pos=(200,-30),ori=315)
     top_instr.draw() 
     left_instr.draw()
     right_instr.draw()
-    left_slant_bar.draw() 
-    right_slant_bar.draw() 
+    cond_im_1.draw() 
+    cond_im_2.draw() 
     bottom_instr.draw()
 
     win.flip()
 
     start_key = event.waitKeys(keyList = ['space','escape'])
-    if start_key == 'escape':
+    if start_key[0] == 'escape':
         if eye_tracking:
             terminate_task()
         core.quit() #no event.clearEvents() necessary
         win.close()
     event.clearEvents()
+
+def displayBlockCue(cond, rot_odd, ang_odd, lang = 0):
+    """ 
+    Function for displaying block cue
+    Parameters:
+        cond (int): condition 0 -> rotation task, 1 -> angle task
+        rot_odd (str): indicates which direction is odd
+        ang_odd (str): indicates which angle is odd
+        lang (int): instruction 0 -> eng, 1 -> dutch 
+    """
+    bottom_instr = visual.TextStim(win, text=space_instr[lang],pos=(0,-280),height= 30) 
+    if cond:
+        top_instr = visual.TextStim(win, text=cue_angle_instr[lang],pos=(0,200),height= 30)
+        cond_im = visual.ImageStim(win,image=clockwise_path,units='pix',pos=(0,-100),size=250)
+        if rot_odd == 'clockwise': # it's flipped because the cue indicates the majority
+            cond_im.image = anticlockwise_path
+    else:
+        top_instr = visual.TextStim(win, text=cue_rotation_instr[lang],pos=(0,200),height= 30)
+        cond_im = visual.Rect(win,width=120,height=20,fillColor ='white',units='pix',pos=(0,-100),ori=315)
+        if ang_odd == 'left': # it's flipped because the cue indicates the majority
+            cond_im.ori = 45
+
+    top_instr.draw() 
+    cond_im.draw() 
+    bottom_instr.draw()
+    win.flip()
+
+    start_key = event.waitKeys(keyList = ['space','escape'])
+    if start_key[0] == 'escape':
+        if eye_tracking:
+            terminate_task()
+        core.quit() #no event.clearEvents() necessary
+        win.close()
+    event.clearEvents()
+
 
 ####################################################
 #Trial sequence functions
 ####################################################
 
-def generatePredictionList(tr_block, n_odd, mode = 'rotation'):
+def generatePredictionList(tr_block, n_odd, odd, mode = 'rotation'):
     """ 
     Generate pseudo randomized properties of trial direction or stimulus angle on a block level
     Parameters:
         tr_block (int):number of trials per block
         n_odd (int): number of odd per block
-        mode (str): indentifies whether it is trial level ('rotation) or stimulus ('angle') 
+        odd (int): indicate which direction or angle is odd 0 clockwise/left and 1 anticlockwise/right
+        mode (str): indentifies whether it is trial level ('rotation) or stimulus ('angle')
+    Returns:
+        predicition_arr (ndarray): array with length tr_block with 0's and 1's for prediciton condition 
     """
     # Check if there are correct amount of odds
     if n_odd > tr_block/2:
@@ -452,8 +509,12 @@ def generatePredictionList(tr_block, n_odd, mode = 'rotation'):
         selected_positions.append(pos)
         # Remove the selected position and its adjacent positions to prevent consecutive 1's
         possible_positions = possible_positions[(possible_positions < pos - 1) | (possible_positions > pos + 1)]
-        
     prediction_arr[selected_positions] = 1
+    
+    # Flip the 0's and 1's depending on which is odd
+    if not odd:
+        prediction_arr = prediction_arr ^ 1
+        
     return prediction_arr
 
 
@@ -527,7 +588,9 @@ def generateBlockLevels(nblocks: int,):
     Generate list with half half zeros and another half ones for any block level parameter
     The attention conditions, which direction is odd or which angle is odd
     Parameters:
-        nblocks (int): amont of blocks
+        nblocks (int): amount of blocks
+    Returns:
+        cond_list (ndarray): array of length nblocks with equal amounts 1's and 0's 
     """
     # Make a list with normal trials (0) and a list with target trials (1)
     half_block = int(np.ceil(nblocks/2))
@@ -538,11 +601,25 @@ def generateBlockLevels(nblocks: int,):
     cond_list = full_cond[:nblocks]
     return cond_list
 
+def participantCounterBalance(participant_number,conds = 4):
+    """ 
+    Assign particpant to conditions such as key-mappings and odd vs regular direction/angles
+    Parameters:
+        participant_number (int):identifier that serves as unique key for assignment
+        conds (int): number of conditions
+    Returns:
+        counter_code (ndarray): array with length conds with a code for every participant 
+    """
+    counter_code = np.empty(conds, dtype=int)
+    for i in range(conds):
+        counter_code[i] = (participant_number // (i+1)) % 2
+
+    return counter_code
+
 
 ####################################################
 #External measurement instruments
 ####################################################
-
 
 def eegTriggerSend(eeg_trigger, lab): #need to elaborate
     """
@@ -573,36 +650,106 @@ elif lab == 'biosemi':
     gsr_port = parallel.ParallelPort(address=0x3FB8)
 
 
-
 ####################################################
 #Experiment value initialization
 ####################################################
+
+# Participant specific values
+rotodd_map = ['clockwise','anticlockwise']
+angodd_map = ['left','right']
+key_map = [['k','d'],['d','k']]
+
+# Counterbalancing and key-mapppig
+subject_code = participantCounterBalance(2)  
+rotation_odd = rotodd_map[subject_code[0]] # index 0 idicate which direction is odd
+angle_odd = angodd_map[subject_code[1]] # index 1 indicates which angle is odd
+rotation_keys = key_map[subject_code[2]] # index 2 indicates which keys are paired to the directions
+angle_keys = key_map[subject_code[3]] # index 3 indicates which keys are paired to the angles
+
+key_mappings = {rotodd_map[0]:rotation_keys[0],rotodd_map[1]:rotation_keys[1],
+                angodd_map[0]:angle_keys[0],angodd_map[1]:angle_keys[1]}
 
 # Generate main stimuli
 grid = generateStimCoordinates(gridcol=12, gridrow=10, jitter=linejitter_arr)
 stimset = generateStim(linelength=35,linewidth=2, coord_array=grid,
                         size=276, fixdistance=134,slant_angle=45)
- 
-block_rot_pred = generatePredictionList(tr_block=n_trials,n_odd=n_odd,mode='rotation')
-block_angle_pred = generatePredictionList(tr_block=n_trials,n_odd=n_odd,mode='angle')
-trial_starts = generateTrialStarts(tr_block=n_trials,bad_quadrant=0)
-target_trials = generateTargetTrials(tr_block=n_trials,ntarget=n_target)
-trial_timings = generateTrialTimings(tr_block=n_trials,isi_dur=isi_duration,jitter=stim_onset_jitter)
+# Generate block-level conditions
+block_condition = generateBlockLevels(n_blocks)
+# Generate trial-level conditions per block
+block_rot_pred = []
+block_angle_pred = []
+trial_starts = []
+target_trials = []
+trial_timings = []
+# Experiment wide lists
+trial_list = [{'trial_index':i} for i in range(n_blocks*n_trials)] # for trialhandler
+recalibrated = np.zeros(n_blocks*n_trials)
 
-for i in range(n_trials):
+for i in range(n_blocks):
+    block_rot_pred.append(generatePredictionList(tr_block=n_trials,n_odd=n_odd,
+                                            odd=subject_code[0],mode='rotation'))
+    block_angle_pred.append(generatePredictionList(tr_block=n_trials,n_odd=n_odd,
+                                            odd=subject_code[1],mode='angle'))
+    trial_starts.append(generateTrialStarts(tr_block=n_trials,bad_quadrant=0))
+    target_trials.append(generateTargetTrials(tr_block=n_trials,ntarget=n_target))
+    trial_timings.append(generateTrialTimings(tr_block=n_trials,isi_dur=isi_duration,
+                                        jitter=stim_onset_jitter))
 
-    # displayAngleInstruction()
-    # displayRotationInstruction()
-    win.flip()
-    cross.autoDraw = True
-    stimPresentation(stimulus=stimset,stim_dur=stim_duration,isi_dur=trial_timings[i],
-                     iti_dur=iti_duration,start_quad=trial_starts[i],
-                     direction=block_rot_pred[i],q_target=target_trials[i],slant=block_angle_pred[i:i+4])
-    keys = event.getKeys()
-    if 'escape' in keys:
-        break
-    event.clearEvents(eventType = 'keyboard')
+# ExperimentHandler and TrialHandler
+trials = data.TrialHandler(trialList = trial_list, nReps=1, method = 'sequential')
+if mode == 'default':
+    this_exp = data.ExperimentHandler(dataFileName = file_name)
+    # this_exp = data.ExperimentHandler(dataFileName = os.getcwd() + '/data/' + 'pilot_predatt_participant_test')
+    this_exp.addLoop(trials)
 
+# Initilize counters
+trial_clock = core.Clock() #define trial clock
+exp_clock = core.Clock() #define experiment clock
+trial_index = 0
+n_correct = 0
+point_counter = 0
+trial_count = 1
+block_count = 1
+hits = 0
+misses = 0
+false_fire = 0
+should_recal = 'no'
+
+####################################################
+#Experiment loop
+####################################################
+
+# Intro message
+intro_message = start_instruction[language]
+displayMessage(intro_message)
+
+# Block loop
+for id in range(n_blocks):
+    cross.autoDraw = False
+    # Inter-block messages: score, task and prediction cue
+    displayMessage(block_msg=True, lang = language,
+                    block_num= id+1, 
+                    hits=hits , misses=misses, 
+                    wrong= false_fire, break_blocks=[0,2])
+    displayCondInstruction(cond=block_condition[id],key_map=key_mappings,lang=language)
+    displayBlockCue(cond=block_condition[id],rot_odd=rotation_odd,ang_odd=angle_odd,lang=language)
+    # Trial loop
+    for i in range(n_trials): 
+        cross.autoDraw = True
+        win.flip()
+        stimPresentation(stimulus=stimset,stim_dur=stim_duration,isi_dur=trial_timings[id][i],
+                        iti_dur=iti_duration,start_quad=trial_starts[id][i],
+                        direction=block_rot_pred[id][i],q_target=target_trials[id][i],slant=block_angle_pred[id][i:i+4])
+        keys = event.getKeys(timeStamped=trial_clock)
+        print(keys)
+        # Terminate if escape is pressed
+        if len(keys)>= 1:
+            if keys[-1][0] == 'escape':
+                print(trigger_time_list)
+                if eye_tracking:
+                    terminate_task()
+                win.close()
+                core.quit()
 
 win.close()
 core.quit()
