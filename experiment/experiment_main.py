@@ -27,7 +27,7 @@ eye_tracking = False #True/False
 if eye_tracking:
     from EyeLinkCoreGraphicsPsychoPy import EyeLinkCoreGraphicsPsychoPy #this are functions used to run the eyetracker calibration and validation
 
-#options
+# Options
 n_trials = 4 # per block
 n_odd = 1  # per block
 n_target = 2 # per block
@@ -342,7 +342,6 @@ def stimPresentation(stimulus, stim_dur, isi_dur,iti_dur, start_quad, direction,
         core.wait(stim_dur)
         win.flip()
         cross.color = cross_standard_col
-        print(stim_timing)
         stim_times.append(stim_timing)
 
     trial_time = trial_clock.getTime()*1000
@@ -590,7 +589,7 @@ def generateBlockLevels(nblocks: int):
     Parameters:
         nblocks (int): amount of blocks
     Returns:
-        cond_list (ndarray): array of length nblocks with equal amounts 1's and 0's 
+        cond_list (ndarray): array of length nblocks with equal amounts 0's (rotation) and 1's (angle) 
     """
     # Make a list with normal trials (0) and a list with target trials (1)
     half_block = int(np.ceil(nblocks/2))
@@ -618,8 +617,53 @@ def participantCounterBalance(participant_number,conds = 4):
 
 
 ####################################################
-#External measurement instruments
+# Measurement functions
 ####################################################
+
+def evaluateResponse(stim_times,target,cond,direction,angles,keys_mapped,key):
+    """
+    Evaluate the response to the trial
+    Parameters:
+        stim_times (list of floats): the times a stimulus apeared i.r.t. the trial start
+        target (int): if target trial and which (0 or 2-3)
+        cond (int): which condition 0 rotation or 1 angles
+        direction (int): rotation direction 0 clockwise or 1 anticlockwise
+        angles (list): list of angles for every stim in the trial 0 left or 1 right
+        keys_mapped (list of list): list of key mapping for the subject [rotation keys (list of k and d),angle keys (list of k and d)] 
+        key (list of tuples):
+    Returns:
+        acc (str): gives the accuracy of the response
+        rt (float or None): gives reaction times if subject reacted
+    """
+    if not key: # If no key was pressed
+        acc = 'correct_nogo'
+        if target:
+            acc = 'miss' 
+        rt = None 
+        return acc, rt
+    else: # If key was pressed
+        if target:
+            rt = key[0][1] - (stim_times[target]/1000)
+            print(stim_times[target]/1000)
+            acc = 'incorrect'
+            if rt < 0:
+                acc = 'false_fire'
+                return acc, rt
+            if rt > 0.9:
+                acc = 'too_slow'
+                return acc, rt
+            if not cond:
+                if key[0][0] == keys_mapped[0][direction]:
+                    acc = 'correct'
+            else:
+                if key[0][0] == keys_mapped[1][angles[target]]:
+                    acc = 'correct'
+            return acc, rt
+        else:
+            acc = 'false_fire'
+            rt = key[0][1]
+            return acc, rt
+    
 
 def eegTriggerSend(eeg_trigger, lab): #need to elaborate
     """
@@ -655,10 +699,10 @@ elif lab == 'biosemi':
 ####################################################
 
 # Condition mapping
+condition_map = ['rotation','angle']
 rotodd_map = ['clockwise','anticlockwise']
 angodd_map = ['left','right']
 key_map = [['k','d'],['d','k']]
-position_map = ['top_left','top_right','bottom_right','bottom_left']
 
 # Counterbalancing and key-mappping
 subject_code = participantCounterBalance(2)  
@@ -667,7 +711,8 @@ angle_odd = angodd_map[subject_code[1]] # index 1 indicates which angle is odd
 rotation_keys = key_map[subject_code[2]] # index 2 indicates which keys are paired to the directions
 angle_keys = key_map[subject_code[3]] # index 3 indicates which keys are paired to the angles
 
-key_mappings = {rotodd_map[0]:rotation_keys[0],rotodd_map[1]:rotation_keys[1],
+key_mappings = [rotation_keys,angle_keys]
+key_map_dict = {rotodd_map[0]:rotation_keys[0],rotodd_map[1]:rotation_keys[1],
                 angodd_map[0]:angle_keys[0],angodd_map[1]:angle_keys[1]}
 
 # Generate main stimuli
@@ -707,11 +752,10 @@ if mode == 'default':
 trial_clock = core.Clock() #define trial clock
 exp_clock = core.Clock() #define experiment clock
 trial_index = 0
-n_correct = 0
-point_counter = 0
 trial_count = 1
 block_count = 1
 hits = 0
+incorrect = 0
 misses = 0
 false_fire = 0
 should_recal = 'no'
@@ -731,24 +775,36 @@ for id in range(n_blocks):
     displayMessage(block_msg=True, lang = language,
                     block_num= id+1, 
                     hits=hits , misses=misses, 
-                    wrong= false_fire, break_blocks=[0,2])
-    displayCondInstruction(cond=block_condition[id],key_map=key_mappings,lang=language)
+                    wrong= false_fire + incorrect, break_blocks=[0,2])
+    displayCondInstruction(cond=block_condition[id],key_map=key_map_dict,lang=language)
     displayBlockCue(cond=block_condition[id],rot_odd=rotation_odd,ang_odd=angle_odd,lang=language)
     # Trial loop
     for i in range(n_trials): 
+        event.clearEvents(eventType = 'keyboard')
         cross.autoDraw = True
         win.flip()
         trial_clock.reset() #start rt timing
         stimulus_times,trial_stamp,triggers,stimpos = stimPresentation(stimulus=stimset,stim_dur=stim_duration,isi_dur=trial_timings[id][i],
                                                                        iti_dur=iti_duration,start_quad=trial_starts[id][i],direction=block_rot_pred[id][i],
                                                                        q_target=target_trials[id][i],slant=block_angle_pred[id][i:i+4])
-        event.clearEvents(eventType = 'keyboard')
-        keys = event.getKeys(timeStamped=trial_clock)
+        keys = event.getKeys(keyList= ['d','k'],timeStamped=trial_clock)
         print(keys)
         t_trial = trial_clock.getTime()*1000
+        accuracy, reaction_time = evaluateResponse(stim_times=stimulus_times,target=target_trials[id][i],
+                                                   cond=block_condition[id],direction=block_rot_pred[id][i],
+                                                   angles=block_angle_pred[id][i:i+4],keys_mapped=key_mappings,key=keys)
+        if accuracy == 'correct': hits+= 1
+        if accuracy == 'false_fire': false_fire+= 1
+        if accuracy == 'incorrect': incorrect+= 1
+        if accuracy == 'miss': misses+= 1
+
+        # Evaluate rotation prediction
+        rot_prediciton = 'regular'
+        if rotodd_map[block_rot_pred[id][i]] == rotation_odd:
+            rot_prediciton = 'odd'
 
         # Store data
-        for ix in range(4):
+        for ix in range(4): # for every stimulus
             trials.addData('LocalTime_DDMMYY_HMS', 
                         str(time.localtime()[2]) + '/' + str(time.localtime()[1]) + '/' + str(time.localtime()[0]) 
                         + '_' + str(time.localtime()[3]) + ':' + str(time.localtime()[4]) + ':' + str(time.localtime()[5])) #HMS = hour min sec
@@ -760,27 +816,47 @@ for id in range(n_blocks):
             trials.addData('age', info['Age'])
             trials.addData('handed', info['Dominant hand'])
             trials.addData('intruct_lang', info['Language'])
-            # trials.addData('loc_quad', )
+            trials.addData('located_quad', info['Localised Quadrant'])
             trials.addData('trial', (trial_count)) # Python starts indexing at 0
+            trials.addData('block',block_count)
             trials.addData('start_position',trial_starts[id][i])
             trials.addData('rotation_odd', rotation_odd)
+            trials.addData('anticlockwise_key',key_map_dict['anticlockwise'])
+            trials.addData('clockwise_key',key_map_dict['clockwise'])
             trials.addData('angle_odd', angle_odd)
-            trials.addData('angle',angodd_map[block_angle_pred[id][i:i+4][ix]])
+            trials.addData('anticlockwise_key',key_map_dict['anticlockwise'])
+            trials.addData('clockwise_key',key_map_dict['clockwise'])
             trials.addData('trial_direction',rotodd_map[block_rot_pred[id][i]])
-            trials.addData('catch_trial',target_trials[id][i])
+            trials.addData('angle',angodd_map[block_angle_pred[id][i:i+4][ix]])
+            trials.addData('target_number',target_trials[id][i])
+            trials.addData('target_trial',int(target_trials[id][i]==ix & ix > 0))
+            trials.addData('t_trial',t_trial)
+            trials.addData('experiment_time_s',exp_clock.getTime())
             trials.addData('t_stim',stimulus_times[ix])
-            trials.addData('position',position_map[stimpos[ix]])
+            trials.addData('position',stimpos[ix])
             trials.addData('sequence',ix)
             trials.addData('eeg_trigger',triggers[ix])
-            trials.addData('experiment_time_s',exp_clock.getTime())
-            trials.addData('t_trial',t_trial)
-            trials.addData('block',block_count)
+            trials.addData('key_data',keys)
+            # Evaluate rotation prediction
+            ang_prediciton = 'regular'
+            if angodd_map[block_angle_pred[id][i:i+4][ix]] == angle_odd:
+                ang_prediciton = 'odd'
+            trials.addData('rotation_prediction',rot_prediciton)
+            trials.addData('angle_prediction',ang_prediciton)
+            trials.addData('task',condition_map[block_condition[id]])
+            if target_trials[id][i]==ix & ix > 0:
+                trials.addData('accuracy',accuracy)
+                trials.addData('rt',reaction_time)
+            else:
+                trials.addData('accuracy','correct_nogo')
+                trials.addData('rt',None)
             if not mode == 'test':this_exp.nextEntry()
 
+        # Add to counters
         trial_count+= 1
         trial_index+= 1
         # Terminate if escape is pressed
-        if len(keys)>= 1:
+        if keys:
             if keys[-1][0] == 'escape':
                 print(trigger_time_list)
                 if eye_tracking:
