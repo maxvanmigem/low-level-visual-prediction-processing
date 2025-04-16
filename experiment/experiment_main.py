@@ -18,21 +18,20 @@ from math import fabs
 #Initialize trial variables
 ####################################################
 
-lab = 'none'   #'actichamp'/'biosemi'/'none'
+lab = 'biosemi'   #'actichamp'/'biosemi'/'none'
 
 mode = 'default'   #'default'/'test'
 
-eye_tracking = False #True/False
+eye_tracking = True #True/False
 
 if eye_tracking:
     from EyeLinkCoreGraphicsPsychoPy import EyeLinkCoreGraphicsPsychoPy #this are functions used to run the eyetracker calibration and validation
 
 # Options
-n_trials = 4 # per block
-n_odd = 1  # per block
-n_target = 2 # per block
-
-n_blocks = 4  # in total      
+n_trials = 28 # per block
+n_odd = 7  # per block
+n_target = 9 # per block
+n_blocks = 32  # in total      
 
 
 #to check problem
@@ -40,8 +39,15 @@ trigger_time_list = []
 
 isi_duration = .52
 stim_onset_jitter = .07
-iti_duration = .5
+iti_duration = .2 # there is also a 300 ms ixation check
 stim_duration = .1
+
+# big breaks
+break_blocks = [8,16,24]
+
+# angles
+angle_set = [45,135]
+ang_map = ['left','right'] # depends on actual angle see angle_set
 
 # random generator
 rng = np.random.default_rng(seed=None)
@@ -60,12 +66,12 @@ clockwise_path = os.getcwd()+'/clockwise_arrow.png'
 
 info =  {'Gender': ['Male','Female', 'X'],'Language':['English','Dutch'], 
          'Age': '', 'Dominant hand':['left','right','ambi'],
-         'Participant ID (***)': '', 'Localised Quadrant':[0,1,2,3]}
+         'Participant number': '', 'Localised Quadrant':[0,1,2,3]}
 
 already_exists = True
 while already_exists and mode != 'test':   #keep asking for a new name when the data file already exists
-     dlg = gui.DlgFromDict(dictionary=info, title='Predatt Experiment')  #display the gui
-     file_name = os.getcwd() + '/data/' + 'predatt_participant_' + info['Participant ID (***)']   #determine the file name (os.getcwd() is where your script is saved)
+     dlg = gui.DlgFromDict(dictionary=info, title='Prediction Experiment')  #display the gui
+     file_name = os.getcwd() + '/data/' + 'participant_' + info['Participant number']   #determine the file name (os.getcwd() is where your script is saved)
      if not dlg.OK:
          core.quit()
      if not os.path.isfile((file_name + '.csv')):  #only escape the while loop if ParticipantNr is unique
@@ -80,6 +86,11 @@ while already_exists and mode != 'test':   #keep asking for a new name when the 
          dlg2.addText('This Participant Nr is in use already, please select another.\n\nParticipant Nr ' 
                       +  str(suggested_participant_nr) + ' is still available.')
          dlg2.show()
+
+pp_id = 0
+if mode == 'default':
+    pp_id = int(info['Participant number'])
+
 
 ####################################################
 # System settings and input transformation
@@ -96,7 +107,7 @@ if mode != 'test':
 
 time_str = time.strftime("_%Y_%m_%d_%H_%M", time.localtime())
 if not mode == 'test':
-    session_identifier = 'pp_' + info['Participant ID (***)'] + time_str
+    session_identifier = 'pp_' + info['Participant number'] + time_str
     # create a folder for the current testing session in the "results" folder
     session_folder = os.path.join(os.getcwd() + '/data/', session_identifier)
 
@@ -121,10 +132,25 @@ win.mouseVisible = False
 cross_standard_col = 'white'
 target_colour = 'red'
 test_instruction = ('Test')
-start_instruction = [('Welcome and thank you for participating in this experiment.\n\n' + 
+start_instruction = [('Welcome and thank you for participating in this experiment.\n' + 
+                     'Please read the following instructions carefully.\n\n' + 
                      'Please press SPACE to continue.'),
-                     ('Welkom en bedankt om deel te nemen aan dit experiment.\n\n' +
+                     ('Welkom en bedankt om deel te nemen aan dit experiment.\n' +
+                     'Gelieve de volgende instructies zorgvuldig te lezen.\n\n' +
                      'Druk op SPATIE om verder te gaan.')]
+
+main_instruction = [('In this experiment you will see groups of lines apearing in a sequence.\n\n' + 
+                    'This sequence will have a certain direction. \n\n' + 
+                    'The lines will also have a certain angle. \n\n' + 
+                    'You will have to respond to this direction or to angle of the lines. \n\n' + 
+                    'This will depends on the instructions at the start of every block. \n\n' +
+                    'Please press SPACE to continue.'),
+                    ('In dit experiment zul je groepen lijnen zien die in een bepaalde volgorde verschijnen.\n\n' +
+                    'Deze volgorde heeft een bepaalde richting.\n\n' +
+                    'De lijnen een specifieke hoek.\n\n' +
+                    'Jij moet ofwel reageren op de richting of op de hoek van de lijntjes.\n\n' +
+                    'Dit zal afhangen van de instructies aan het begin van elke block. \n\n' +
+                    'Druk op SPATIE om verder te gaan.')]
 
 stim_rotation_instr = [('Respond to the rotation direction when the cross turns red'),
                        ('Reageer op de rotatie richting wanneer het kruis rood wordt')]
@@ -174,6 +200,8 @@ def generateStimCoordinates(gridcol, gridrow, jitter):
         gridcol (int): Number of columns in the grid.
         gridrow (int): Number of rows in the grid.
         jitter (ndarray): 30x30x2 array that adds variation to the grid coords.
+    Returns:
+        coord_array (ndarray):array of shape col x row x 2 x 2 with xy coordinates for start and end points for every line
     """
     # Calculate spacing of grid
     x_spacing = 1.0 / (gridcol)
@@ -216,7 +244,7 @@ def generateStimCoordinates(gridcol, gridrow, jitter):
     return coord_array
 
 
-def generateStim(linelength, linewidth ,coord_array, size, fixdistance, slant_angle):
+def generateStim(linelength, linewidth ,coord_array, size, fixdistance, angles=angle_set):
     """ 
     Generate an ElementArrayStim object consisting of lines on the coordinates 
     for stimulus for each quadrant position and with differently angled lines
@@ -227,7 +255,9 @@ def generateStim(linelength, linewidth ,coord_array, size, fixdistance, slant_an
         coord_array (ndarray): set of x and y coords for de sub elements
         size (int or float): scaling factor
         fixdistance (int or float): distance of stimulus corner to screen center
-        slant_angle (int): angle of the stimuli, two sets are generated: this angle and its complement 
+        angles (list of ints): angle of the stimuli, two types of angles 
+    Returns:
+        line_stimuli (ndarray of psychopy ElementArrayStim): array with visual objects for different position 
     """
     # i.e. quadrants
     sections = 4
@@ -240,7 +270,7 @@ def generateStim(linelength, linewidth ,coord_array, size, fixdistance, slant_an
     gridrow = np.shape(coord_array)[1]
 
     # Init arrays to store line objects per quadrant and also for two differny line angles
-    line_stimuli = np.empty((2,sections), dtype=object)   # 2 types (0 is left slanted, 1 is right slanted ) and 4 quadrants
+    line_stimuli = np.empty((2,sections), dtype=object)   # 2 types (angle_set see intial values at start of script) and 4 quadrants
  
     for quad in range(sections):
         n_lines = gridcol*gridrow
@@ -257,11 +287,11 @@ def generateStim(linelength, linewidth ,coord_array, size, fixdistance, slant_an
                 xys[it_count,1] = the_y
                 it_count += 1
         sizes = np.atleast_2d([linelength,linewidth]).repeat(repeats=n_lines, axis=0)
-        # Left slanted stimuli
-        line_stimuli[0,quad] = visual.ElementArrayStim(win, units='pix',elementTex=None, elementMask='sqr', xys= xys, oris = 360-slant_angle,
+        # Angle 0 stimuli (\)
+        line_stimuli[0,quad] = visual.ElementArrayStim(win, units='pix',elementTex=None, elementMask='sqr', xys= xys, oris = angles[0],
                                            nElements=n_lines, sizes=sizes, colors=(1.0, 1.0, 1.0), colorSpace='rgb')
-        # Right slanted stimuli
-        line_stimuli[1,quad] = visual.ElementArrayStim(win, units='pix',elementTex=None, elementMask='sqr', xys= xys, oris = slant_angle,
+        # Angle 1 stimuli (/)
+        line_stimuli[1,quad] = visual.ElementArrayStim(win, units='pix',elementTex=None, elementMask='sqr', xys= xys, oris = angles[1],
                                            nElements=n_lines, sizes=sizes, colors=(1.0, 1.0, 1.0), colorSpace='rgb')
 
     return line_stimuli
@@ -271,22 +301,22 @@ def generateStim(linelength, linewidth ,coord_array, size, fixdistance, slant_an
 #Trial display functions
 ####################################################
 
-def drawStim(line_stimuli, quad, slant):
+def drawStim(line_stimuli, quad, angle):
     """ 
     Draws the stimuli in the correct quadrant
     Parmeters:
         line_stimuli (ndarray): array with psychopy ElementArrayStim objects for every position and slant
         quad (int): quadrant 0,1,2 or 3
-        slant (0 or 1): left slanted (0) or right slanted (1)
+        angle (0 or 1): angle 0 or 1 see angle_set for actual angles in degrees
     """
     # Select the stimulus for the quadrant and slant
-    line_stim = line_stimuli[slant,quad]
+    line_stim = line_stimuli[angle,quad]
 
     # Draw 
     line_stim.draw()
 
 
-def stimPresentation(stimulus, stim_dur, isi_dur,iti_dur, start_quad, direction, q_target, slant, lab=lab): 
+def stimPresentation(stimulus, stim_dur, isi_dur,iti_dur, start_quad, direction, q_target, angles, lab=lab): 
     """
     Stimulus presentation for a single trial
     Parmeters:
@@ -297,7 +327,7 @@ def stimPresentation(stimulus, stim_dur, isi_dur,iti_dur, start_quad, direction,
         start_quad (int): position of the first stimulus in the sequence 0,1,2 or 3
         direction (0 or 1): direction of the sequence clockwise (0) or anticlockwise (1)
         q_target (int): determines the moment (which quad) of a target (1,2,3,4) quadrant if there is a no target (0) 
-        slant (list): of 1 and 0 left slanted (0) or right slanted (1)
+        angles ( list of 0 and 1): first or second angle see angle_set for actual angles
         lab (str): determines EEG aspects such as port and trigger
     Return:
         stim_times (ndarray): length of 4 with times of stim presentation
@@ -331,9 +361,9 @@ def stimPresentation(stimulus, stim_dur, isi_dur,iti_dur, start_quad, direction,
         if target_ls[i]:
             cross.color = target_colour 
         # Implemenent a target trial
-        trigger = int(selectEEGStimulusTrigger(stimpos,pos=i)) # EEG trigger generation
+        trigger = int(selectEEGStimulusTrigger(pos=stimpos,seq=i)) # EEG trigger generation
         triggers.append(trigger)
-        drawStim(stimulus,stimpos,slant[i])
+        drawStim(stimulus,stimpos,angles[i])
         wait = isi_dur[i]-stim_clock.getTime() # Drawing the stimulus takes time, this compensates that
         core.wait(wait)
         stim_timing =trial_clock.getTime()*1000
@@ -391,40 +421,40 @@ def displayMessage(msg=None, block_msg=False, lang=0, block_num=None, hits=None,
     event.clearEvents()
 
 
-def displayCondInstruction(cond, key_map, lang=0):
+def displayCondInstruction(cond, key_map, lang=0,angles=angle_set):
     """ 
     Function for displaying block task
     Parameters:
         cond (int): condition 0 -> rotation task, 1 -> angle task
-        key_map (dict): key mappings
+        key_map (list of list): with the first list giving the rotation keys in order and the second givning the angle keys in order
         lang (int): instruction 0 -> eng, 1 -> dutch 
     """
     left_instr = visual.TextStim(win, text=press_d_instr[lang],pos=(-200,-150),height= 30) 
     right_instr = visual.TextStim(win, text=press_k_instr[lang],pos=(200,-150),height= 30) 
     bottom_instr = visual.TextStim(win, text=space_instr[lang],pos=(0,-280),height= 30) 
 
-    if key_map['clockwise'] == 'd':
+    if key_map[0][0] == 'd':
         clock_wpos = (-200,-30)
         anticlock_wpos = (200,-30)
     else:
         clock_wpos = (200,-30)
         anticlock_wpos = (-200,-30)
 
-    if key_map['left'] == 'd':
-        left_wpos = (-200,-30)
-        right_wpos = (200,-30)
+    if key_map[1][0] == 'd':
+        angle_0_wpos = (-200,-30)
+        angle_1_wpos = (200,-30)
     else:
-        left_wpos = (200,-30)
-        right_wpos = (-200,-30)
+        angle_0_wpos = (200,-30)
+        angle_1_wpos = (-200,-30)
  
-    if cond:
+    if cond == 0:
         top_instr = visual.TextStim(win, text=stim_rotation_instr[lang],pos=(0,200),height= 30) 
         cond_im_1 = visual.ImageStim(win,image=clockwise_path,units='pix',pos=clock_wpos,size=200)
         cond_im_2 = visual.ImageStim(win,image=anticlockwise_path,units='pix',pos=anticlock_wpos,size=200)
-    else:
+    elif cond == 1:
         top_instr = visual.TextStim(win, text=stim_angle_instr[lang],pos=(0,200),height= 30) 
-        cond_im_1 = visual.Rect(win,width=120,height=20,fillColor ='white',units='pix',pos=left_wpos,ori=45)
-        cond_im_2 = visual.Rect(win,width=120,height=20,fillColor ='white',units='pix',pos=right_wpos,ori=315)
+        cond_im_1 = visual.Rect(win,width=120,height=10,fillColor ='white',units='pix',pos=angle_0_wpos,ori=angles[0])
+        cond_im_2 = visual.Rect(win,width=120,height=10,fillColor ='white',units='pix',pos=angle_1_wpos,ori=angles[1])
 
     top_instr.draw() 
     left_instr.draw()
@@ -441,26 +471,26 @@ def displayCondInstruction(cond, key_map, lang=0):
         win.close()
     event.clearEvents()
 
-def displayBlockCue(cond, rot_odd, ang_odd, lang=0):
+def displayBlockCue(cond, rot_odd, ang_odd, lang=0,angles=angle_set):
     """ 
     Function for displaying block cue
     Parameters:
         cond (int): condition 0 -> rotation task, 1 -> angle task
         rot_odd (str): indicates which direction is odd
-        ang_odd (str): indicates which angle is odd
+        ang_odd (0 or 1): indicates which angle is odd
         lang (int): instruction 0 -> eng, 1 -> dutch 
     """
     bottom_instr = visual.TextStim(win, text=space_instr[lang],pos=(0,-280),height= 30) 
-    if cond:
-        top_instr = visual.TextStim(win, text=cue_angle_instr[lang],pos=(0,200),height= 30)
+    if cond == 0:
+        top_instr = visual.TextStim(win, text=cue_rotation_instr[lang],pos=(0,200),height= 30)
         cond_im = visual.ImageStim(win,image=clockwise_path,units='pix',pos=(0,-100),size=250)
         if rot_odd == 'clockwise': # it's flipped because the cue indicates the majority
             cond_im.image = anticlockwise_path
-    else:
-        top_instr = visual.TextStim(win, text=cue_rotation_instr[lang],pos=(0,200),height= 30)
-        cond_im = visual.Rect(win,width=120,height=20,fillColor ='white',units='pix',pos=(0,-100),ori=315)
-        if ang_odd == 'left': # it's flipped because the cue indicates the majority
-            cond_im.ori = 45
+    elif cond == 1:
+        top_instr = visual.TextStim(win, text=cue_angle_instr[lang],pos=(0,200),height= 30)
+        cond_im = visual.Rect(win,width=120,height=10,fillColor ='white',units='pix',pos=(0,-100),ori=angles[0])
+        if ang_odd == 0: # it's flipped because the cue indicates the majority or the regular direction
+            cond_im.ori = angles[1]
 
     top_instr.draw() 
     cond_im.draw() 
@@ -523,6 +553,8 @@ def generateTrialStarts(tr_block,bad_quadrant):
     Parameters:
         tr_block (int):number of trials per block
         bad_quadrant (int): the quadrant that we want to exclude based on localiser (0,1,2,3)
+    Returns:
+        block_list (list of ints): list of starting postions for every trial in a block
     """
     quad_li = np.arange(4)
     # You have two diametric quadrants of interest
@@ -546,6 +578,8 @@ def generateTargetTrials(tr_block, ntarget):
     Parameters:
         tr_block (int):number of trials per block
         ntarget (int): number of target trials
+    Return:
+        full_list (list of ints): list of targets for every trial in a block
     """
     # Make a list with normal trials (0) and a list with target trials (1)
     full_list = np.zeros(tr_block-ntarget,dtype=int)
@@ -572,6 +606,8 @@ def generateTrialTimings(tr_block,isi_dur, jitter,randng=rng):
         isi_dur (float): mean duration of isi
         jitter (float): variation on isi duration
         randng (np Generator class): random number generator
+    Returns:
+        block_tlist (list of lists): list of timings for every stimulus per trial
     """
     block_tlist= []
     for i in range(tr_block):
@@ -628,7 +664,7 @@ def evaluateResponse(stim_times,target,cond,direction,angles,keys_mapped,key):
         target (int): if target trial and which (0 or 2-3)
         cond (int): which condition 0 rotation or 1 angles
         direction (int): rotation direction 0 clockwise or 1 anticlockwise
-        angles (list): list of angles for every stim in the trial 0 left or 1 right
+        angles (list): list of angles for every stim in the trial 0 or 1
         keys_mapped (list of list): list of key mapping for the subject [rotation keys (list of k and d),angle keys (list of k and d)] 
         key (list of tuples):
     Returns:
@@ -668,6 +704,9 @@ def evaluateResponse(stim_times,target,cond,direction,angles,keys_mapped,key):
 def eegTriggerSend(eeg_trigger, lab): #need to elaborate
     """
     Sends trigger to EEG recording
+    Parameters:
+        eeg_trigger (int): number code to send to the EEG computer
+        lab (str): the lab changes the code
     """
     if not lab == 'none':
         gsr_port.setData(eeg_trigger)
@@ -678,11 +717,16 @@ def eegTriggerSend(eeg_trigger, lab): #need to elaborate
         trigger_time_list.append([core.getTime(),eeg_trigger])
 
 
-def selectEEGStimulusTrigger(start,pos):
+def selectEEGStimulusTrigger(pos,seq):
     """
     distinguish EEG trigger for stimulus
+    Parameters:
+        pos (int): the position of the stimulus
+        seq (int): the order of the stimulus
+    Returns:
+        eeg_stim_trigger (int): code to send to the EEG computer
     """
-    eeg_stim_trigger = int((start+1)*10 + (pos+1))
+    eeg_stim_trigger = int((pos+1)*10 + (seq+1))
 
     return eeg_stim_trigger
 
@@ -695,30 +739,262 @@ elif lab == 'biosemi':
 
 
 ####################################################
+#Eye-tracker set-up
+####################################################
+# Step 1: Connect to the EyeLink Host PC
+
+edf_file = 'pp_' + str(pp_id) + '.EDF' #init datafile (max 8 characters)
+
+if eye_tracking:
+    try:
+        el_tracker = pylink.EyeLink("100.1.1.1")
+    except RuntimeError as error:
+        print('ERROR:', error)
+        core.quit()
+        sys.exit()
+
+
+    # Step 2: Open an EDF data file on the Host PC
+    try:
+        el_tracker.openDataFile(edf_file)
+    except RuntimeError as err:
+        print('ERROR:', err)
+        # close the link if we have one open
+        if el_tracker.isConnected():
+            el_tracker.close()
+        core.quit()
+        sys.exit()
+
+    el_tracker.sendCommand("add_file_preamble_text 'Predatt Experiment'") #add personalized data file header (preamble text)
+
+    # Step 3: Configure the tracker
+    #
+    # Put the tracker in offline mode before we change tracking parameters
+    el_tracker.setOfflineMode()
+
+    # Get the software version:  1-EyeLink I, 2-EyeLink II, 3/4-EyeLink 1000,
+    # 5-EyeLink 1000 Plus, 6-Portable DUO
+    eyelink_ver = 0  # set version to 0, in case running in Dummy mode
+    if eye_tracking:
+        vstr = el_tracker.getTrackerVersionString()
+        eyelink_ver = int(vstr.split()[-1].split('.')[0])
+        # print out some version info in the shell
+        print('Running experiment on %s, version %d' % (vstr, eyelink_ver))
+
+    # File and Link data control
+    # what eye events to save in the EDF file, include everything by default
+    file_event_flags = 'LEFT,RIGHT,FIXATION,SACCADE,BLINK,MESSAGE,BUTTON,INPUT'
+    # what eye events to make available over the link, include everything by default
+    link_event_flags = 'LEFT,RIGHT,FIXATION,SACCADE,BLINK,BUTTON,FIXUPDATE,INPUT'
+    # what sample data to save in the EDF data file and to make available
+    # over the link, include the 'HTARGET' flag to save head target sticker
+    # data for supported eye trackers
+    if eyelink_ver > 3:
+        file_sample_flags = 'LEFT,RIGHT,GAZE,HREF,RAW,AREA,HTARGET,GAZERES,BUTTON,STATUS,INPUT'
+        link_sample_flags = 'LEFT,RIGHT,GAZE,GAZERES,AREA,HTARGET,STATUS,INPUT'
+    else:
+        file_sample_flags = 'LEFT,RIGHT,GAZE,HREF,RAW,AREA,GAZERES,BUTTON,STATUS,INPUT'
+        link_sample_flags = 'LEFT,RIGHT,GAZE,GAZERES,AREA,STATUS,INPUT'
+    el_tracker.sendCommand("file_event_filter = %s" % file_event_flags)
+    el_tracker.sendCommand("file_sample_data = %s" % file_sample_flags)
+    el_tracker.sendCommand("link_event_filter = %s" % link_event_flags)
+    el_tracker.sendCommand("link_sample_data = %s" % link_sample_flags)
+
+    el_tracker.sendCommand("sample_rate 1000") #250, 500, 1000, or 2000 (only for EyeLink 1000 plus)
+    el_tracker.sendCommand("recording_parse_type = GAZE")
+    el_tracker.sendCommand("select_parser_configuration 0") #saccade detection thresholds: 0-> standard/coginitve, 1-> sensitive/psychophysiological
+    el_tracker.sendCommand("calibration_type = HV9") #13 point calibration (recommended for head free remote mode)
+
+    # Step 4: set up a graphics environment for calibration
+
+    # get the native screen resolution used by PsychoPy
+    scn_width, scn_height = win.size
+
+    # Pass the display pixel coordinates (left, top, right, bottom) to the tracker
+    # see the EyeLink Installation Guide, "Customizing Screen Settings"
+    el_coords = "screen_pixel_coords = 0 0 %d %d" % (scn_width - 1, scn_height - 1)
+    el_tracker.sendCommand(el_coords)
+
+    # Write a DISPLAY_COORDS message to the EDF file
+    # Data Viewer needs this piece of info for proper visualization, see Data
+    # Viewer User Manual, "Protocol for EyeLink Data to Viewer Integration"
+    dv_coords = "DISPLAY_COORDS  0 0 %d %d" % (scn_width - 1, scn_height - 1)
+    el_tracker.sendMessage(dv_coords)
+
+    # Configure a graphics environment (genv) for tracker calibration
+    genv = EyeLinkCoreGraphicsPsychoPy(el_tracker, win)
+    print(genv)  # print out the version number of the CoreGraphics library
+
+    # Set background and foreground colors for the calibration target
+    # in PsychoPy, (-1, -1, -1)=black, (1, 1, 1)=white, (0, 0, 0)=mid-gray
+    foreground_color = (1, 1, 1)
+    background_color = win.color
+    genv.setCalibrationColors(foreground_color, background_color)
+    
+    # Set up the calibration target
+    # Use the default calibration target ('circle')
+    genv.setTargetType('circle')
+
+    # Configure the size of the calibration target (in pixels)
+    # this option applies only to "circle" and "spiral" targets
+    genv.setTargetSize(24)
+
+    # Beeps to play during calibration, validation and drift correction
+    # parameters: target, good, error
+    #     target -- sound to play when target moves
+    #     good -- sound to play on successful operation
+    #     error -- sound to play on failure or interruption
+    # Each parameter could be ''--default sound, 'off'--no sound, or a wav file
+    genv.setCalibrationSounds('', '', '')
+
+    # Request Pylink to use the PsychoPy window we opened above for calibration
+    pylink.openGraphicsEx(genv)
+        
+
+# Eye-tracker termination function
+def terminate_task():
+    """ Terminate the task gracefully and retrieve the EDF data file
+
+    file_to_retrieve: The EDF on the Host that we would like to download
+    win: the current window used by the experimental script
+    """
+    el_tracker = pylink.getEYELINK()
+    if el_tracker.isConnected():
+        # Terminate the current trial first if the task terminated prematurely
+        error = el_tracker.isRecording()
+        if error == pylink.TRIAL_OK:
+            el_tracker = pylink.getEYELINK()
+            # Stop recording
+            if el_tracker.isRecording():
+                # add 100 ms to catch final trial events
+                pylink.pumpDelay(100)
+                el_tracker.stopRecording()
+        # Put tracker in Offline mode
+        el_tracker.setOfflineMode()
+        # Clear the Host PC screen and wait for 500 ms
+        el_tracker.sendCommand('clear_screen 0')
+        pylink.msecDelay(500)
+        # Close the edf data file on the Host
+        el_tracker.closeDataFile()
+        # Show a file transfer message on the screen
+        message.text = 'EDF data is transfering from EyeLink Host PC'
+        message.draw()
+        win.flip()
+        pylink.pumpDelay(500)
+        # Download the EDF data file from the Host PC to a local data folder
+        # parameters: source_file_on_the_host, destination_file_on_local_drive
+        local_edf = os.path.join(session_folder, session_identifier + '.EDF')
+        try:
+            el_tracker.receiveDataFile(edf_file, local_edf)
+        except RuntimeError as error:
+            print('ERROR:', error)
+
+        # Close the link to the tracker.
+        el_tracker.close()
+
+def checkGazeOnFix():
+    # Here we implement a gaze trigger, so the target only comes up when
+    # the subject direct gaze to the fixation cross
+    event.clearEvents()  # clear cached PsychoPy events
+    # determine which eye(s) is/are available
+    # 0- left, 1-right, 2-binocular
+    eye_used = el_tracker.eyeAvailable()
+    new_sample = None
+    old_sample = None
+    trigger_fired = False
+    in_hit_region = False
+    should_recali = 'no'
+    trigger_start_time = core.getTime()
+    # fire the trigger following a 300-ms gaze
+    minimum_duration = 0.3
+    gaze_start = -1
+    while not trigger_fired:
+        # abort the current trial if the tracker is no longer recording
+        error = el_tracker.isRecording()
+        if error is not pylink.TRIAL_OK:
+            el_tracker.sendMessage('tracker_disconnected')
+            return error
+
+        # if the trigger did not fire in 30 seconds, abort trial
+        if core.getTime() - trigger_start_time >= 10.0:
+            el_tracker.sendMessage('trigger_timeout_recal')
+            # re-calibrate before trial
+            should_recali = 'yes'
+            return should_recali
+
+        # check for keyboard events, skip a trial if ESCAPE is pressed
+        # terminate the task is Ctrl-C is pressed
+        for keycode, modifier in event.getKeys(modifiers=True):
+            # Abort a trial and recalibrate if "ESCAPE" is pressed
+            if keycode == 'escape':
+                el_tracker.sendMessage('abort_and_recal')
+                # re-calibrate now trial
+                should_recali = 'yes'
+                return should_recali
+
+        # Do we have a sample in the sample buffer?
+        # and does it differ from the one we've seen before?
+        new_sample = el_tracker.getNewestSample()
+        if new_sample is not None:
+            if old_sample is not None:
+                if new_sample.getTime() != old_sample.getTime():
+                    # check if the new sample has data for the eye
+                    # currently being tracked; if so, we retrieve the current
+                    # gaze position and PPD (how many pixels correspond to 1
+                    # deg of visual angle, at the current gaze position)
+                    if eye_used == 1 and new_sample.isRightSample():
+                        g_x, g_y = new_sample.getRightEye().getGaze()
+                    if eye_used == 0 and new_sample.isLeftSample():
+                        g_x, g_y = new_sample.getLeftEye().getGaze()
+
+                    # break the while loop if the current gaze position is
+                    # in a 120 x 120 pixels region around the screen centered
+                    fix_x, fix_y = (scn_width/2.0, scn_height/2.0)
+                    if fabs(g_x - fix_x) < 60 and fabs(g_y - fix_y) < 60:
+                        # record gaze start time
+                        if not in_hit_region:
+                            if gaze_start == -1:
+                                gaze_start = core.getTime()
+                                in_hit_region = True
+                        # check the gaze duration and fire
+                        if in_hit_region:
+                            gaze_dur = core.getTime() - gaze_start
+                            if gaze_dur > minimum_duration:
+                                trigger_fired = True
+                    else:  # gaze outside the hit region, reset variables
+                        in_hit_region = False
+                        gaze_start = -1
+
+            # update the "old_sample"
+            old_sample = new_sample
+    return should_recali
+
+####################################################
 #Experiment value initialization
 ####################################################
 
 # Condition mapping
 condition_map = ['rotation','angle']
-rotodd_map = ['clockwise','anticlockwise']
-angodd_map = ['left','right']
-key_map = [['k','d'],['d','k']]
+rot_map = ['clockwise','anticlockwise']
+key_map = [['d','k'],['k','d']]
 
 # Counterbalancing and key-mappping
-subject_code = participantCounterBalance(2)  
-rotation_odd = rotodd_map[subject_code[0]] # index 0 idicate which direction is odd
-angle_odd = angodd_map[subject_code[1]] # index 1 indicates which angle is odd
+subject_code = participantCounterBalance(participant_number=pp_id)  
+if mode == 'test':
+    subject_code = [0,0,0,1]
+rotation_odd = rot_map[subject_code[0]] # index 0 idicate which direction is odd
+angle_odd = subject_code[1] # index 1 indicates which angle is odd, we go straight here because it's easier to referenc angle_set
 rotation_keys = key_map[subject_code[2]] # index 2 indicates which keys are paired to the directions
 angle_keys = key_map[subject_code[3]] # index 3 indicates which keys are paired to the angles
 
 key_mappings = [rotation_keys,angle_keys]
-key_map_dict = {rotodd_map[0]:rotation_keys[0],rotodd_map[1]:rotation_keys[1],
-                angodd_map[0]:angle_keys[0],angodd_map[1]:angle_keys[1]}
+key_map_dict = {rot_map[0]:rotation_keys[0],rot_map[1]:rotation_keys[1],
+                ang_map[0]:angle_keys[0],ang_map[1]:angle_keys[1]}
 
 # Generate main stimuli
 grid = generateStimCoordinates(gridcol=12, gridrow=10, jitter=linejitter_arr)
 stimset = generateStim(linelength=35,linewidth=2, coord_array=grid,
-                        size=276, fixdistance=134,slant_angle=45)
+                        size=276, fixdistance=134,angles=angle_set)
 # Generate block-level conditions
 block_condition = generateBlockLevels(n_blocks)
 # Generate trial-level conditions per block
@@ -757,7 +1033,6 @@ block_count = 1
 hits = 0
 incorrect = 0
 misses = 0
-false_fire = 0
 should_recal = 'no'
 
 ####################################################
@@ -768,39 +1043,131 @@ should_recal = 'no'
 intro_message = start_instruction[language]
 displayMessage(intro_message)
 
+mainstr_message = main_instruction[language]
+displayMessage(mainstr_message)
+
+stimset[0,0].draw()
+stimset[1,1].draw()
+win.flip()
+start_key = event.waitKeys(keyList = ['space','escape'])
+
+
+# Start eye-tracking and calibrate
+if eye_tracking:
+    message.text = eye_tracking_instr[language] #show calibration message
+    message.draw()
+    win.flip()
+    try:
+        el_tracker.doTrackerSetup()
+    except RuntimeError as err:
+        print('ERROR:', err)
+        el_tracker.exitCalibration() #calibrate the tracker #once you are happy with the calibration and validation (!), you are ready to run the experiment. 
+
+    el_tracker.setOfflineMode() #this is called before start_recording() to make sure the eye tracker has enough time to switch modes (to start recording)
+    pylink.pumpDelay(100)
+    #starts the EyeLink tracker recording, sets up link for data reception if enabled.
+    el_tracker.startRecording(1,1,1,1) 
+    # The 1,1,1,1 just has to do with whether samples and events etcetera needs to be written to EDF file. Recording needs to be started for each block
+    pylink.pumpDelay(100) #wait for 100 ms to cache some samples
+
 # Block loop
 for id in range(n_blocks):
     cross.autoDraw = False
     # Inter-block messages: score, task and prediction cue
     displayMessage(block_msg=True, lang = language,
-                    block_num= id+1, 
+                    block_num= block_count, 
                     hits=hits , misses=misses, 
-                    wrong= false_fire + incorrect, break_blocks=[0,2])
-    displayCondInstruction(cond=block_condition[id],key_map=key_map_dict,lang=language)
+                    wrong= incorrect, break_blocks=break_blocks)
+    hits = 0 #reset
+    incorrect = 0
+    misses = 0
+    # Start eye-tracker and if it's a long break calibrate
+    if block_count in break_blocks:
+        if eye_tracking:
+            cross.autoDraw = False
+            message.text = eye_tracking_instr[language] #show calibration message
+            message.draw()
+            win.flip()
+            try:
+                el_tracker.doTrackerSetup()
+            except RuntimeError as err:
+                print('ERROR:', err)
+                el_tracker.exitCalibration() #calibrate the tracker #once you are happy with the calibration and validation (!), you are ready to run the experiment. 
+
+            el_tracker.setOfflineMode() #this is called before start_recording() to make sure the eye tracker has enough time to switch modes (to start recording)
+            pylink.pumpDelay(100)
+            #starts the EyeLink tracker recording, sets up link for data reception if enabled.
+            el_tracker.startRecording(1,1,1,1) 
+            # The 1,1,1,1 just has to do with whether samples and events etcetera needs to be written to EDF file. Recording needs to be started for each block
+            pylink.pumpDelay(100) #wait for 100 ms to cache some samples
+            displayMessage(space_instr[language])
+    else:
+        if eye_tracking:
+            el_tracker.setOfflineMode() #this is called before start_recording() to make sure the eye tracker has enough time to switch modes (to start recording)
+            pylink.pumpDelay(100)
+            #starts the EyeLink tracker recording, sets up link for data reception if enabled.
+            el_tracker.startRecording(1,1,1,1) 
+            # The 1,1,1,1 just has to do with whether samples and events etcetera needs to be written to EDF file. Recording needs to be started for each block
+            pylink.pumpDelay(100) #wait for 100 ms to cache some samples]
+    displayCondInstruction(cond=block_condition[id],key_map=key_mappings,lang=language)
     displayBlockCue(cond=block_condition[id],rot_odd=rotation_odd,ang_odd=angle_odd,lang=language)
+    cross.autoDraw = True
+    eegTriggerSend(int(253),lab=lab) # 200 is the start-recording command in the biosemi config file
+    # Trigger for block
+    block_tigger = int(60 + n_blocks)
+    eegTriggerSend(block_tigger,lab=lab)
     # Trial loop
-    for i in range(n_trials): 
-        event.clearEvents(eventType = 'keyboard')
+    for i in range(n_trials):
         cross.autoDraw = True
         win.flip()
+        if eye_tracking:
+            el_tracker.sendMessage('TRIALID %d' % (trial_count)) #send a message ("TRIALID") to mark the start of a trial
+            el_tracker.sendCommand("record_status_message 'trial %s block %s'" % (trial_count,block_count)) #to show the current task, block nr and trial nr #+1 because Python starts at 0
+            # Check if gaze is on fixation and if not start recallibration
+            should_recal = checkGazeOnFix()
+            if should_recal == 'yes':
+                recalibrated[trial_index] = 1
+                eegTriggerSend(int(254),lab=lab) # 201 is the stop-recording command in the biosemi config file
+                cross.autoDraw = False
+                message.text = eye_tracking_instr[language]
+                message.draw()
+                win.flip()
+                try:
+                    el_tracker.doTrackerSetup()
+                except RuntimeError as err:
+                    print('ERROR:', err)
+                    el_tracker.exitCalibration()
+                should_recal = 'no'
+                el_tracker.setOfflineMode() #this is called before start_recording() to make sure the eye tracker has enough time to switch modes (to start recording)
+                pylink.pumpDelay(100)
+                #starts the EyeLink tracker recording, sets up link for data reception if enabled.
+                el_tracker.startRecording(1,1,1,1) 
+                # The 1,1,1,1 just has to do with whether samples and events etcetera needs to be written to EDF file. Recording needs to be started for each block
+                pylink.pumpDelay(100) #wait for 100 ms to cache some samples
+                displayMessage(space_instr[language])
+                cross.autoDraw =True
+                eegTriggerSend(int(253),lab=lab) # 200 is the start-recording command in the biosemi config file 
+        event.clearEvents(eventType = 'keyboard')
         trial_clock.reset() #start rt timing
+
         stimulus_times,trial_stamp,triggers,stimpos = stimPresentation(stimulus=stimset,stim_dur=stim_duration,isi_dur=trial_timings[id][i],
                                                                        iti_dur=iti_duration,start_quad=trial_starts[id][i],direction=block_rot_pred[id][i],
-                                                                       q_target=target_trials[id][i],slant=block_angle_pred[id][i:i+4])
-        keys = event.getKeys(keyList= ['d','k'],timeStamped=trial_clock)
+                                                                       q_target=target_trials[id][i],angles=block_angle_pred[id][i:i+4])
+        keys = event.getKeys(keyList= ['d','k','escape'],timeStamped=trial_clock)
         print(keys)
         t_trial = trial_clock.getTime()*1000
         accuracy, reaction_time = evaluateResponse(stim_times=stimulus_times,target=target_trials[id][i],
                                                    cond=block_condition[id],direction=block_rot_pred[id][i],
                                                    angles=block_angle_pred[id][i:i+4],keys_mapped=key_mappings,key=keys)
         if accuracy == 'correct': hits+= 1
-        if accuracy == 'false_fire': false_fire+= 1
-        if accuracy == 'incorrect': incorrect+= 1
         if accuracy == 'miss': misses+= 1
+        if accuracy == 'false_fire': incorrect+= 1
+        if accuracy == 'incorrect': incorrect+= 1
+        if accuracy == 'too_slow': incorrect+= 1
 
         # Evaluate rotation prediction
         rot_prediciton = 'regular'
-        if rotodd_map[block_rot_pred[id][i]] == rotation_odd:
+        if rot_map[block_rot_pred[id][i]] == rotation_odd:
             rot_prediciton = 'odd'
 
         # Store data
@@ -811,7 +1178,7 @@ for id in range(n_blocks):
             trials.addData('lab', lab)
             trials.addData('mode', mode)
             trials.addData('eye_tracking', eye_tracking)
-            trials.addData('participant', 'test')
+            trials.addData('participant', pp_id)
             trials.addData('gender', info['Gender'])
             trials.addData('age', info['Age'])
             trials.addData('handed', info['Dominant hand'])
@@ -821,13 +1188,13 @@ for id in range(n_blocks):
             trials.addData('block',block_count)
             trials.addData('start_position',trial_starts[id][i])
             trials.addData('rotation_odd', rotation_odd)
-            trials.addData('anticlockwise_key',key_map_dict['anticlockwise'])
             trials.addData('clockwise_key',key_map_dict['clockwise'])
+            trials.addData('anticlockwise_key',key_map_dict['anticlockwise'])
             trials.addData('angle_odd', angle_odd)
-            trials.addData('anticlockwise_key',key_map_dict['anticlockwise'])
-            trials.addData('clockwise_key',key_map_dict['clockwise'])
-            trials.addData('trial_direction',rotodd_map[block_rot_pred[id][i]])
-            trials.addData('angle',angodd_map[block_angle_pred[id][i:i+4][ix]])
+            trials.addData(f'angle_{ang_map[0]}_key',key_map_dict[f'{ang_map[0]}'])
+            trials.addData(f'angle_{ang_map[1]}_key',key_map_dict[f'{ang_map[1]}'])
+            trials.addData('trial_direction',rot_map[block_rot_pred[id][i]])
+            trials.addData('angle',ang_map[block_angle_pred[id][i:i+4][ix]])
             trials.addData('target_number',target_trials[id][i])
             trials.addData('target_trial',int(target_trials[id][i]==ix & ix > 0))
             trials.addData('t_trial',t_trial)
@@ -839,7 +1206,7 @@ for id in range(n_blocks):
             trials.addData('key_data',keys)
             # Evaluate rotation prediction
             ang_prediciton = 'regular'
-            if angodd_map[block_angle_pred[id][i:i+4][ix]] == angle_odd:
+            if block_angle_pred[id][i:i+4][ix] == angle_odd:
                 ang_prediciton = 'odd'
             trials.addData('rotation_prediction',rot_prediciton)
             trials.addData('angle_prediction',ang_prediciton)
@@ -851,11 +1218,11 @@ for id in range(n_blocks):
                 trials.addData('accuracy','correct_nogo')
                 trials.addData('rt',None)
             if not mode == 'test':this_exp.nextEntry()
-
         # Add to counters
         trial_count+= 1
         trial_index+= 1
         # Terminate if escape is pressed
+        print(keys)
         if keys:
             if keys[-1][0] == 'escape':
                 print(trigger_time_list)
@@ -864,6 +1231,14 @@ for id in range(n_blocks):
                 win.close()
                 core.quit()
     block_count+= 1
+    # Pause recordings
+    eegTriggerSend(int(254),lab=lab) # 200 is the start-recording command in the biosemi config file
+    if eye_tracking:
+        el_tracker.stopRecording() #this is typically done for each bloc
 
+# Disconnect, download the EDF file, then terminate the task
+if eye_tracking:
+    terminate_task()
+    
 win.close()
 core.quit()
