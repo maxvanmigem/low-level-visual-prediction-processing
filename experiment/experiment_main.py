@@ -10,6 +10,7 @@ import pylink #the last is to communicate with the eyetracker
 import pickle
 from psychopy import parallel, visual, gui, data, event, core, monitors
 from psychopy.visual import ShapeStim
+from psychopy.hardware import keyboard as kb
 from psychopy import logging
 from math import fabs
 
@@ -18,11 +19,11 @@ from math import fabs
 #Initialize trial variables
 ####################################################
 
-lab = 'biosemi'   #'actichamp'/'biosemi'/'none'
+lab = 'none'   #'actichamp'/'biosemi'/'none'
 
 mode = 'default'   #'default'/'test'
 
-eye_tracking = True #True/False
+eye_tracking = False #True/False
 
 if eye_tracking:
     from EyeLinkCoreGraphicsPsychoPy import EyeLinkCoreGraphicsPsychoPy #this are functions used to run the eyetracker calibration and validation
@@ -30,7 +31,7 @@ if eye_tracking:
 # Options
 n_trials = 28 # per block
 n_odd = 7  # per block
-n_target = 9 # per block
+n_target = 8 # per block
 n_blocks = 32  # in total      
 
 
@@ -39,15 +40,15 @@ trigger_time_list = []
 
 isi_duration = .52
 stim_onset_jitter = .07
-iti_duration = .2 # there is also a 300 ms ixation check
+iti_duration = .5 # there is also a 300 ms ixation check
 stim_duration = .1
 
 # big breaks
 break_blocks = [8,16,24]
 
 # angles
-angle_set = [45,135]
-ang_map = ['left','right'] # depends on actual angle see angle_set
+angle_set = [0,90]
+ang_map = ['horz','vert'] # depends on actual angle see angle_set
 
 # random generator
 rng = np.random.default_rng(seed=None)
@@ -97,10 +98,13 @@ if mode == 'default':
 ####################################################
 
 language = 0 # default
+avoid_quadrant = 0
+
 if mode != 'test':   
     # Language selection
     lang_map = {'English':0 , 'Dutch':1}
     language = lang_map[info['Language']]
+    avoid_quadrant = info['Localised Quadrant']
 # We download EDF data file from the EyeLink Host PC to the local hard
 # drive at the end of each testing session, here we rename the EDF to
 # include session start date/time
@@ -358,6 +362,7 @@ def stimPresentation(stimulus, stim_dur, isi_dur,iti_dur, start_quad, direction,
     for i,stimpos in enumerate(stimpos_ls):
         win.flip()
         stim_clock.reset()
+        gazeCheck() # fixation check in for every stimulus
         if target_ls[i]:
             cross.color = target_colour 
         # Implemenent a target trial
@@ -656,7 +661,7 @@ def participantCounterBalance(participant_number,conds = 4):
 # Measurement functions
 ####################################################
 
-def evaluateResponse(stim_times,target,cond,direction,angles,keys_mapped,key):
+def evaluateResponse(stim_times,target,cond,direction,angles,keys_mapped,key,rt_limit):
     """
     Evaluate the response to the trial
     Parameters:
@@ -667,6 +672,7 @@ def evaluateResponse(stim_times,target,cond,direction,angles,keys_mapped,key):
         angles (list): list of angles for every stim in the trial 0 or 1
         keys_mapped (list of list): list of key mapping for the subject [rotation keys (list of k and d),angle keys (list of k and d)] 
         key (list of tuples):
+        rt_limit (float): the time limit for a response in seconds
     Returns:
         acc (str): gives the accuracy of the response
         rt (float or None): gives reaction times if subject reacted
@@ -685,7 +691,7 @@ def evaluateResponse(stim_times,target,cond,direction,angles,keys_mapped,key):
             if rt < 0:
                 acc = 'false_fire'
                 return acc, rt
-            if rt > 0.9:
+            if rt > rt_limit:
                 acc = 'too_slow'
                 return acc, rt
             if not cond:
@@ -895,7 +901,6 @@ def terminate_task():
 def checkGazeOnFix():
     # Here we implement a gaze trigger, so the target only comes up when
     # the subject direct gaze to the fixation cross
-    event.clearEvents()  # clear cached PsychoPy events
     # determine which eye(s) is/are available
     # 0- left, 1-right, 2-binocular
     eye_used = el_tracker.eyeAvailable()
@@ -906,7 +911,7 @@ def checkGazeOnFix():
     should_recali = 'no'
     trigger_start_time = core.getTime()
     # fire the trigger following a 300-ms gaze
-    minimum_duration = 0.3
+    minimum_duration = 0.1
     gaze_start = -1
     while not trigger_fired:
         # abort the current trial if the tracker is no longer recording
@@ -921,16 +926,6 @@ def checkGazeOnFix():
             # re-calibrate before trial
             should_recali = 'yes'
             return should_recali
-
-        # check for keyboard events, skip a trial if ESCAPE is pressed
-        # terminate the task is Ctrl-C is pressed
-        for keycode, modifier in event.getKeys(modifiers=True):
-            # Abort a trial and recalibrate if "ESCAPE" is pressed
-            if keycode == 'escape':
-                el_tracker.sendMessage('abort_and_recal')
-                # re-calibrate now trial
-                should_recali = 'yes'
-                return should_recali
 
         # Do we have a sample in the sample buffer?
         # and does it differ from the one we've seen before?
@@ -948,9 +943,9 @@ def checkGazeOnFix():
                         g_x, g_y = new_sample.getLeftEye().getGaze()
 
                     # break the while loop if the current gaze position is
-                    # in a 120 x 120 pixels region around the screen centered
+                    # in a 100 x 100 pixels region around the screen centered
                     fix_x, fix_y = (scn_width/2.0, scn_height/2.0)
-                    if fabs(g_x - fix_x) < 60 and fabs(g_y - fix_y) < 60:
+                    if fabs(g_x - fix_x) < 50 and fabs(g_y - fix_y) < 50:
                         # record gaze start time
                         if not in_hit_region:
                             if gaze_start == -1:
@@ -968,6 +963,40 @@ def checkGazeOnFix():
             # update the "old_sample"
             old_sample = new_sample
     return should_recali
+
+def calibrationProcedure():
+    if eye_tracking:
+            cross.autoDraw = False
+            message.text = eye_tracking_instr[language] #show calibration message
+            message.draw()
+            win.flip()
+            try:
+                el_tracker.doTrackerSetup()
+            except RuntimeError as err:
+                print('ERROR:', err)
+                el_tracker.exitCalibration() #calibrate the tracker #once you are happy with the calibration and validation (!), you are ready to run the experiment. 
+
+            el_tracker.setOfflineMode() #this is called before start_recording() to make sure the eye tracker has enough time to switch modes (to start recording)
+            pylink.pumpDelay(100)
+            #starts the EyeLink tracker recording, sets up link for data reception if enabled.
+            el_tracker.startRecording(1,1,1,1) 
+            # The 1,1,1,1 just has to do with whether samples and events etcetera needs to be written to EDF file. Recording needs to be started for each block
+            pylink.pumpDelay(100) #wait for 100 ms to cache some samples
+            displayMessage(space_instr[language])
+
+def gazeCheck():
+    if eye_tracking:
+        el_tracker.sendMessage('TRIALID %d' % (trial_count)) #send a message ("TRIALID") to mark the start of a trial
+        el_tracker.sendCommand("record_status_message 'trial %s block %s'" % (trial_count,block_count)) #to show the current task, block nr and trial nr #+1 because Python starts at 0
+        # Check if gaze is on fixation and if not start recallibration
+        should_recal = checkGazeOnFix()
+        if should_recal == 'yes':
+            recalibrated[trial_index] = 1
+            eegTriggerSend(int(254),lab=lab) # 201 is the stop-recording command in the biosemi config file
+            calibrationProcedure()
+            cross.autoDraw =True
+            eegTriggerSend(int(253),lab=lab) # 200 is the start-recording command in the biosemi config file 
+
 
 ####################################################
 #Experiment value initialization
@@ -1012,7 +1041,7 @@ for i in range(n_blocks):
                                             odd=subject_code[0],mode='rotation'))
     block_angle_pred.append(generatePredictionList(tr_block=n_trials,n_odd=n_odd,
                                             odd=subject_code[1],mode='angle'))
-    trial_starts.append(generateTrialStarts(tr_block=n_trials,bad_quadrant=0))
+    trial_starts.append(generateTrialStarts(tr_block=n_trials,bad_quadrant=avoid_quadrant))
     target_trials.append(generateTargetTrials(tr_block=n_trials,ntarget=n_target))
     trial_timings.append(generateTrialTimings(tr_block=n_trials,isi_dur=isi_duration,
                                         jitter=stim_onset_jitter))
@@ -1051,25 +1080,8 @@ stimset[1,1].draw()
 win.flip()
 start_key = event.waitKeys(keyList = ['space','escape'])
 
-
 # Start eye-tracking and calibrate
-if eye_tracking:
-    message.text = eye_tracking_instr[language] #show calibration message
-    message.draw()
-    win.flip()
-    try:
-        el_tracker.doTrackerSetup()
-    except RuntimeError as err:
-        print('ERROR:', err)
-        el_tracker.exitCalibration() #calibrate the tracker #once you are happy with the calibration and validation (!), you are ready to run the experiment. 
-
-    el_tracker.setOfflineMode() #this is called before start_recording() to make sure the eye tracker has enough time to switch modes (to start recording)
-    pylink.pumpDelay(100)
-    #starts the EyeLink tracker recording, sets up link for data reception if enabled.
-    el_tracker.startRecording(1,1,1,1) 
-    # The 1,1,1,1 just has to do with whether samples and events etcetera needs to be written to EDF file. Recording needs to be started for each block
-    pylink.pumpDelay(100) #wait for 100 ms to cache some samples
-
+calibrationProcedure()
 # Block loop
 for id in range(n_blocks):
     cross.autoDraw = False
@@ -1083,24 +1095,7 @@ for id in range(n_blocks):
     misses = 0
     # Start eye-tracker and if it's a long break calibrate
     if block_count in break_blocks:
-        if eye_tracking:
-            cross.autoDraw = False
-            message.text = eye_tracking_instr[language] #show calibration message
-            message.draw()
-            win.flip()
-            try:
-                el_tracker.doTrackerSetup()
-            except RuntimeError as err:
-                print('ERROR:', err)
-                el_tracker.exitCalibration() #calibrate the tracker #once you are happy with the calibration and validation (!), you are ready to run the experiment. 
-
-            el_tracker.setOfflineMode() #this is called before start_recording() to make sure the eye tracker has enough time to switch modes (to start recording)
-            pylink.pumpDelay(100)
-            #starts the EyeLink tracker recording, sets up link for data reception if enabled.
-            el_tracker.startRecording(1,1,1,1) 
-            # The 1,1,1,1 just has to do with whether samples and events etcetera needs to be written to EDF file. Recording needs to be started for each block
-            pylink.pumpDelay(100) #wait for 100 ms to cache some samples
-            displayMessage(space_instr[language])
+        calibrationProcedure()
     else:
         if eye_tracking:
             el_tracker.setOfflineMode() #this is called before start_recording() to make sure the eye tracker has enough time to switch modes (to start recording)
@@ -1120,34 +1115,6 @@ for id in range(n_blocks):
     for i in range(n_trials):
         cross.autoDraw = True
         win.flip()
-        if eye_tracking:
-            el_tracker.sendMessage('TRIALID %d' % (trial_count)) #send a message ("TRIALID") to mark the start of a trial
-            el_tracker.sendCommand("record_status_message 'trial %s block %s'" % (trial_count,block_count)) #to show the current task, block nr and trial nr #+1 because Python starts at 0
-            # Check if gaze is on fixation and if not start recallibration
-            should_recal = checkGazeOnFix()
-            if should_recal == 'yes':
-                recalibrated[trial_index] = 1
-                eegTriggerSend(int(254),lab=lab) # 201 is the stop-recording command in the biosemi config file
-                cross.autoDraw = False
-                message.text = eye_tracking_instr[language]
-                message.draw()
-                win.flip()
-                try:
-                    el_tracker.doTrackerSetup()
-                except RuntimeError as err:
-                    print('ERROR:', err)
-                    el_tracker.exitCalibration()
-                should_recal = 'no'
-                el_tracker.setOfflineMode() #this is called before start_recording() to make sure the eye tracker has enough time to switch modes (to start recording)
-                pylink.pumpDelay(100)
-                #starts the EyeLink tracker recording, sets up link for data reception if enabled.
-                el_tracker.startRecording(1,1,1,1) 
-                # The 1,1,1,1 just has to do with whether samples and events etcetera needs to be written to EDF file. Recording needs to be started for each block
-                pylink.pumpDelay(100) #wait for 100 ms to cache some samples
-                displayMessage(space_instr[language])
-                cross.autoDraw =True
-                eegTriggerSend(int(253),lab=lab) # 200 is the start-recording command in the biosemi config file 
-        event.clearEvents(eventType = 'keyboard')
         trial_clock.reset() #start rt timing
 
         stimulus_times,trial_stamp,triggers,stimpos = stimPresentation(stimulus=stimset,stim_dur=stim_duration,isi_dur=trial_timings[id][i],
@@ -1158,7 +1125,8 @@ for id in range(n_blocks):
         t_trial = trial_clock.getTime()*1000
         accuracy, reaction_time = evaluateResponse(stim_times=stimulus_times,target=target_trials[id][i],
                                                    cond=block_condition[id],direction=block_rot_pred[id][i],
-                                                   angles=block_angle_pred[id][i:i+4],keys_mapped=key_mappings,key=keys)
+                                                   angles=block_angle_pred[id][i:i+4],keys_mapped=key_mappings,
+                                                   key=keys, rt_limit = 1.0)
         if accuracy == 'correct': hits+= 1
         if accuracy == 'miss': misses+= 1
         if accuracy == 'false_fire': incorrect+= 1
