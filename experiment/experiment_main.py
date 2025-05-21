@@ -19,11 +19,11 @@ from math import fabs
 #Initialize trial variables
 ####################################################
 
-lab = None  #'actichamp'/'biosemi'/None
+lab = 'biosemi'  #'actichamp'/'biosemi'/None
 
 mode = 'default'   #'default'/'test'
 
-eye_tracking = False #True/False
+eye_tracking = True #True/False
 
 if eye_tracking:
     from EyeLinkCoreGraphicsPsychoPy import EyeLinkCoreGraphicsPsychoPy #this are functions used to run the eyetracker calibration and validation
@@ -728,7 +728,7 @@ def participantCounterBalance(participant_number,conds = 4):
 # Measurement functions
 ####################################################
 
-def evaluateResponse(stim_times,target,cond,rotation,angles,keys_mapped,key,rt_limit):
+def evaluateResponse(target,cond,rotation,angles,keys_mapped,key,rt_limit):
     """
     Evaluate the response to the trial
     Parameters:
@@ -1146,16 +1146,16 @@ intro_message = start_instruction[language]
 displayMessage(intro_message)
 
 if not mode == 'test':
-    # instr_message = first1_instruction[language]
-    # displayMessage(instr_message)
-    # displayExample(0)
-    # instr_message = first2_instruction[language]
-    # displayMessage(instr_message)
-    # displayExample(1)
-    # stimset[0,3].draw()
-    # stimset[1,2].draw()
-    # instr_message = second_instruction[language]
-    # displayMessage(instr_message, pos=(0,120))
+    instr_message = first1_instruction[language]
+    displayMessage(instr_message)
+    displayExample(0)
+    instr_message = first2_instruction[language]
+    displayMessage(instr_message)
+    displayExample(1)
+    stimset[0,3].draw()
+    stimset[1,2].draw()
+    instr_message = second_instruction[language]
+    displayMessage(instr_message, pos=(0,120))
     cross.color = target_colour
     cross.pos = (0,120)
     cross.autoDraw = True
@@ -1210,7 +1210,7 @@ for bl in range(n_blocks):
         
         print(keys)
         t_trial = trial_clock.getTime()*1000
-        accuracy, reaction_time = evaluateResponse(stim_times=stimulus_times,target=target_trials[bl][i],
+        accuracy, reaction_time = evaluateResponse(target=target_trials[bl][i],
                                                    cond=block_condition[bl],rotation=block_rot_pred[bl][i],
                                                    angles=block_angle_pred[bl][i],keys_mapped=key_mappings,
                                                    key=keys, rt_limit = 1.0)
