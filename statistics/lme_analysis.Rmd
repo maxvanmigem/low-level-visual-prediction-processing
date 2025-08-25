@@ -1,0 +1,76 @@
+---
+title: "Low level vs high level visual prediction processing"
+author: "Max Van Migem"
+date: "2025-08-20"
+---
+
+```{r packages}
+library(car)
+library(pbkrtest)
+library(lmerTest)
+library(lme4)
+library(optimx)
+library(performance)
+library(emmeans)
+# library(brms)
+# library(rstan)
+
+```
+## load data
+
+```{r data}
+df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/behaviour_acc.csv')
+
+df <- subset(df, !participant %in% c(31))
+
+```
+```{r data}
+df$participant <- as.factor(df$participant)
+df$task <- as.factor(df$task)
+df$angle_prediction <- as.factor(df$angle_prediction)
+df$rotation_prediction <- as.factor(df$rotation_prediction)
+
+
+options(contrasts = c("contr.sum", "contr.poly"))
+
+df_angle <- subset(df, task == 'angle')
+df_rotation <- subset(df, task == 'rotation')
+df_angle_reg <- subset(df_angle, angle_prediction == 'regular')
+df_angle_odd <- subset(df_angle, angle_prediction == 'odd')
+df_rot_reg <- subset(df_rotation, rotation_prediction == 'regular')
+df_rot_odd <- subset(df_rotation, rotation_prediction == 'odd')
+
+```
+
+## the behaviour model
+# rt
+```{r}
+
+f1 <- rt ~ 1 + task + (1 | participant)
+
+fit.behaviour_rt <-  lmer(f1, data = df, control = lmerControl(optimizer = c("Nelder_Mead"), optCtrl=list(maxfun=2e6)))
+
+confint(fit.behaviour, method ="Wald")
+summary(fit.behaviour)
+contrasts(df$attention)
+
+```
+# acc
+```{r}
+f1 <- hit_rate ~ 1 + angle_prediction + (1 + angle_prediction | participant)
+f1 <- dprime ~ 1 + task + angle_prediction + rotation_prediction + task*angle_prediction*rotation_prediction + (1 + task  | participant)
+
+fit.behaviour_acc <-  lmer(f1, data = df, control = lmerControl(optimizer = c("Nelder_Mead"), optCtrl=list(maxfun=2e6)))
+fit.behaviour_acc <-  lmer(f1, data = df, control = lmerControl(optimizer = c("Nelder_Mead"), optCtrl=list(maxfun=2e6)))
+
+confint(fit.behaviour_acc, method ="Wald")
+summary(fit.behaviour_acc)
+contrasts(df$attention)
+contrasts(df$expectation)
+
+mean(df_regular$beta, na.rm = TRUE)
+sd(df_regular$beta, na.rm = TRUE)
+mean(df_odd$beta, na.rm = TRUE)
+sd(df_odd$beta, na.rm = TRUE)
+
+```
