@@ -1,0 +1,149 @@
+---
+title: "Low level vs high level visual prediction processing"
+author: "Max Van Migem"
+date: "2025-08-26"
+---
+
+```{r packages}
+# Load required packages
+library(lme4)
+library(lmerTest)
+library(parallel)
+library(tidyverse)
+
+```
+```{r}
+# Set seed for reproducibility
+set.seed(123)
+
+# Function to simulate LME data
+simulate_lme_data <- function(n_subjects, n_timepoints, 
+                             fixed_intercept, fixed_slope,
+                             subject_intercept_sd, subject_slope_sd,
+                             residual_sd, effect_size = 0) {
+  
+  # Generate subject-level random effects
+  subjects <- data.frame(
+    subject_id = 1:n_subjects,
+    subject_intercept = rnorm(n_subjects, 0, subject_intercept_sd),
+    subject_slope = rnorm(n_subjects, 0, subject_slope_sd)
+  )
+  
+  # Create longitudinal data
+  data <- expand.grid(
+    subject_id = 1:n_subjects,
+    time = 1:n_timepoints
+  ) %>%
+    left_join(subjects, by = "subject_id") %>%
+    mutate(
+      # Fixed effects + random effects + noise
+      y = fixed_intercept + subject_intercept + 
+          (fixed_slope + effect_size + subject_slope) * time +
+          rnorm(n(), 0, residual_sd),
+      # Group variable (for between-subjects effects)
+      group = ifelse(subject_id <= n_subjects/2, "control", "treatment"),
+      # Time as factor for categorical analysis
+      time_factor = as.factor(time)
+    )
+  
+  return(data)
+}
+```
+```{r}
+# Function to run single simulation
+run_simulation <- function(sim_id, n_subjects, n_timepoints, 
+                          fixed_intercept, fixed_slope,
+                          subject_intercept_sd, subject_slope_sd,
+                          residual_sd, effect_size) {
+  
+  # Simulate data
+  sim_data <- simulate_lme_data(
+    n_subjects, n_timepoints, fixed_intercept, fixed_slope,
+    subject_intercept_sd, subject_slope_sd, residual_sd, effect_size
+  )
+  
+  tryCatch({
+    # Fit LME model - testing time effect
+    model <- lmer(y ~ time + (1 + time | subject_id), data = sim_data)
+    
+    # Extract p-value for time effect
+    summary_model <- summary(model)
+    p_value <- summary_model$coefficients["time", "Pr(>|t|)"]
+    
+    # Return results
+    return(data.frame(
+      sim_id = sim_id,
+      p_value = p_value,
+      significant = p_value < 0.05,
+      converged = TRUE
+    ))
+  }, error = function(e) {
+    return(data.frame(
+      sim_id = sim_id,
+      p_value = NA,
+      significant = FALSE,
+      converged = FALSE
+    ))
+  })
+}
+
+# Run Monte Carlo simulation
+monte_carlo_lme_power <- function(n_simulations = 1000, n_subjects = 50, 
+                                 n_timepoints = 5, effect_size = 0.5,
+                                 fixed_intercept = 10, fixed_slope = 0.2,
+                                 subject_intercept_sd = 2, subject_slope_sd = 0.5,
+                                 residual_sd = 1, n_cores = detectCores() - 1) {
+  
+  # Run simulations in parallel
+  if (n_cores > 1) {
+    cl <- makeCluster(n_cores)
+    clusterEvalQ(cl, {
+      library(lme4)
+      library(lmerTest)
+    })
+    
+    results <- parLapply(cl, 1:n_simulations, function(i) {
+      run_simulation(i, n_subjects, n_timepoints, fixed_intercept, fixed_slope,
+                    subject_intercept_sd, subject_slope_sd, residual_sd, effect_size)
+    })
+    
+    stopCluster(cl)
+  } else {
+    results <- lapply(1:n_simulations, function(i) {
+      run_simulation(i, n_subjects, n_timepoints, fixed_intercept, fixed_slope,
+                    subject_intercept_sd, subject_slope_sd, residual_sd, effect_size)
+    })
+  }
+  
+  # Combine results
+  results_df <- bind_rows(results)
+  
+  # Calculate power
+  power <- mean(results_df$significant, na.rm = TRUE)
+  convergence_rate <- mean(results_df$converged, na.rm = TRUE)
+  
+  return(list(
+    power = power,
+    convergence_rate = convergence_rate,
+    results = results_df,
+    parameters = list(
+      n_simulations = n_simulations,
+      n_subjects = n_subjects,
+      n_timepoints = n_timepoints,
+      effect_size = effect_size
+    )
+  ))
+}
+
+# Example usage
+# Run simulation with default parameters
+power_results <- monte_carlo_lme_power(
+  n_simulations = 100,  # Use more simulations for final analysis (e.g., 1000)
+  n_subjects = 50,
+  n_timepoints = 5,
+  effect_size = 0.5
+)
+
+cat(sprintf("Power: %.3f\n", power_results$power))
+cat(sprintf("Convergence rate: %.3f\n", power_results$convergence_rate))
+```

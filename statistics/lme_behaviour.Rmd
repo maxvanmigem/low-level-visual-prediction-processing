@@ -1,0 +1,109 @@
+---
+title: "Low level vs high level visual prediction processing"
+author: "Max Van Migem"
+date: "2025-08-20"
+---
+
+```{r packages}
+library(car)
+library(pbkrtest)
+library(lmerTest)
+library(lme4)
+library(optimx)
+library(performance)
+library(emmeans)
+# library(brms)
+# library(rstan)
+
+```
+## load data
+
+```{r data}
+df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/behaviour_acc.csv')
+# df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/behaviour_rt.csv')
+
+```
+```{r data}
+df$participant <- as.factor(df$participant)
+df$task <- as.factor(df$task)
+df$angle_prediction <- as.factor(df$angle_prediction)
+df$rotation_prediction <- as.factor(df$rotation_prediction)
+
+
+options(contrasts = c("contr.sum", "contr.poly"))
+
+df_angle <- subset(df, task == 'angle')
+df_rotation <- subset(df, task == 'rotation')
+df_angle_reg <- subset(df_angle, angle_prediction == 'regular')
+df_angle_odd <- subset(df_angle, angle_prediction == 'odd')
+df_rot_reg <- subset(df_rotation, rotation_prediction == 'regular')
+df_rot_odd <- subset(df_rotation, rotation_prediction == 'odd')
+
+```
+
+## the behaviour model
+
+# acc
+```{r}
+f1 <- dprime ~ 1 + task + angle_prediction + rotation_prediction + 
+                task*angle_prediction*rotation_prediction + 
+                (1 + task + angle_prediction | participant)
+
+f2 <- dprime ~ 1 + task + angle_prediction + rotation_prediction + 
+                task*angle_prediction*rotation_prediction + 
+                (1 + task | participant)  # This one fit better after bootstrapping
+
+
+f1 <- accuracy ~ 1 + task + angle_prediction + rotation_prediction + 
+                task*angle_prediction*rotation_prediction + 
+                (1 + task + angle_prediction | participant) # Larger model better after bootstrapping
+
+f2 <- accuracy ~ 1 + task + angle_prediction + rotation_prediction + 
+                task*angle_prediction*rotation_prediction + 
+                (1  | participant)
+
+fit.behaviour_acc <-  lmer(f1, data = df, control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B')))
+fit.behaviour_acc_2 <-  lmer(f2, data = df, control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B')))
+
+confint(fit.behaviour_acc, method ="boot",nsim =1000)
+summary(fit.behaviour_acc)
+contrasts(df$task)
+contrasts(df$angle_prediction)
+contrasts(df$rotation_prediction)
+
+mean(df_regular$beta, na.rm = TRUE)
+sd(df_regular$beta, na.rm = TRUE)
+mean(df_odd$beta, na.rm = TRUE)
+sd(df_odd$beta, na.rm = TRUE)
+
+```
+# rt
+```{r}
+
+f1 <- rt ~ 1 + task + angle_prediction + rotation_prediction + 
+        task*angle_prediction*rotation_prediction + 
+        (1 + task + rotation_prediction | participant) # dropped angle_prediction out of random eff because convergence
+
+fit.behaviour_rt <-  lmer(f1, data = df, control = lmerControl(optimizer = c("Nelder_Mead"), optCtrl=list(maxfun=2e6)))
+
+confint(fit.behaviour_rt, method ="Wald")
+summary(fit.behaviour_rt)
+contrasts(df$task)
+contrasts(df$angle_prediction)
+contrasts(df$rotation_prediction)
+
+```
+```{r}
+anova(fit.behaviour_acc,fit.behaviour_acc_2)
+summary(fit.behaviour_acc)
+summary(fit.behaviour_acc_2)
+plot(fit.behaviour_acc_2)
+qqnorm(residuals(fit.behaviour_acc_2))
+bootstrap|> tidy()
+bootstrap <- PBmodcomp(fit.behaviour_acc,fit.behaviour_acc_2,nsim=1000)
+check_model(fit.behaviour_acc)
+check_model(fit.behaviour_acc_2)
+
+summary(bootstrap)
+
+```
