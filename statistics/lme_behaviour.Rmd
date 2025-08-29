@@ -19,25 +19,25 @@ library(emmeans)
 ## load data
 
 ```{r data}
-df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/behaviour_acc.csv')
-# df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/behaviour_rt.csv')
+# df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/behaviour_acc.csv')
+df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/behaviour_rt.csv')
 
 ```
 ```{r data}
 df$participant <- as.factor(df$participant)
-df$task <- as.factor(df$task)
-df$angle_prediction <- as.factor(df$angle_prediction)
-df$rotation_prediction <- as.factor(df$rotation_prediction)
+df$feature <- as.factor(df$feature)
+df$attended_feature <- as.factor(df$attended_feature)
+df$unattended_feature <- as.factor(df$unattended_feature)
 
 
 options(contrasts = c("contr.sum", "contr.poly"))
 
-df_angle <- subset(df, task == 'angle')
-df_rotation <- subset(df, task == 'rotation')
-df_angle_reg <- subset(df_angle, angle_prediction == 'regular')
-df_angle_odd <- subset(df_angle, angle_prediction == 'odd')
-df_rot_reg <- subset(df_rotation, rotation_prediction == 'regular')
-df_rot_odd <- subset(df_rotation, rotation_prediction == 'odd')
+df_angle <- subset(df, feature == 'angle')
+df_rotation <- subset(df, feature == 'rotation')
+df_att_reg <- subset(df_angle, attended_feature == 'regular')
+df_att_odd <- subset(df_angle, attended_feature == 'odd')
+df_unat_reg <- subset(df_rotation, unattended_feature == 'regular')
+df_unat_odd <- subset(df_rotation, unattended_feature == 'odd')
 
 ```
 
@@ -45,31 +45,31 @@ df_rot_odd <- subset(df_rotation, rotation_prediction == 'odd')
 
 # acc
 ```{r}
-f1 <- dprime ~ 1 + task + angle_prediction + rotation_prediction + 
-                task*angle_prediction*rotation_prediction + 
-                (1 + task + angle_prediction | participant)
+# f1 <- dprime ~ 1 + feature + attended_feature + unattended_feature + 
+#                 feature*attended_feature*unattended_feature + 
+#                 (1 + feature + attended_feature + unattended_feature | participant)
 
-f2 <- dprime ~ 1 + task + angle_prediction + rotation_prediction + 
-                task*angle_prediction*rotation_prediction + 
-                (1 + task | participant)  # This one fit better after bootstrapping
+# f2 <- dprime ~ 1 + feature + attended_feature + unattended_feature + 
+#                 feature*attended_feature*unattended_feature + 
+#                 (1  + feature|participant) # This one is best after bootstrapping
 
 
-f1 <- accuracy ~ 1 + task + angle_prediction + rotation_prediction + 
-                task*angle_prediction*rotation_prediction + 
-                (1 + task + angle_prediction | participant) # Larger model better after bootstrapping
+f1 <- accuracy ~ 1 + feature + attended_feature + unattended_feature + 
+                feature*attended_feature*unattended_feature + 
+                (1 + feature + attended_feature +unattended_feature | participant)
 
-f2 <- accuracy ~ 1 + task + angle_prediction + rotation_prediction + 
-                task*angle_prediction*rotation_prediction + 
-                (1  | participant)
+f2 <- accuracy ~ 1 + feature + attended_feature + unattended_feature + 
+                feature*attended_feature*unattended_feature + 
+                (1 | participant) # This one fit better
 
 fit.behaviour_acc <-  lmer(f1, data = df, control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B')))
 fit.behaviour_acc_2 <-  lmer(f2, data = df, control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B')))
 
-confint(fit.behaviour_acc, method ="boot",nsim =1000)
+confint(fit.behaviour_acc, method ="boot",nsim = 1000)
 summary(fit.behaviour_acc)
-contrasts(df$task)
-contrasts(df$angle_prediction)
-contrasts(df$rotation_prediction)
+contrasts(df$feature)
+contrasts(df$attended_feature)
+contrasts(df$unattended_feature)
 
 mean(df_regular$beta, na.rm = TRUE)
 sd(df_regular$beta, na.rm = TRUE)
@@ -80,17 +80,19 @@ sd(df_odd$beta, na.rm = TRUE)
 # rt
 ```{r}
 
-f1 <- rt ~ 1 + task + angle_prediction + rotation_prediction + 
-        task*angle_prediction*rotation_prediction + 
-        (1 + task + rotation_prediction | participant) # dropped angle_prediction out of random eff because convergence
+f1 <- rt ~ 1 + feature + attended_feature + unattended_feature + 
+        feature*attended_feature*unattended_feature + 
+        (1 + feature + attended_feature | participant) # dropped unattended_feature out of random eff because convergence
 
 fit.behaviour_rt <-  lmer(f1, data = df, control = lmerControl(optimizer = c("Nelder_Mead"), optCtrl=list(maxfun=2e6)))
 
 confint(fit.behaviour_rt, method ="Wald")
 summary(fit.behaviour_rt)
-contrasts(df$task)
-contrasts(df$angle_prediction)
-contrasts(df$rotation_prediction)
+contrasts(df$feature)
+contrasts(df$attended_feature)
+contrasts(df$unattended_feature)
+emmeans(fit.behaviour_rt, pairwise ~ attended_feature | feature)
+emmeans(fit.behaviour_rt, pairwise ~ attended_feature*unattended_feature | feature)
 
 ```
 ```{r}
