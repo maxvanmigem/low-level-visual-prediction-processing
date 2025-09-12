@@ -47,3 +47,5 @@ design = Dict(:sequence =>["1","2","3","4"],
 eff = effects(design,m)
 eff.subject .= string(evts[1,:subject])
 eff.selected_electrode .= "POz"
+
+pp_efficient = [2,3,4,7,9,10,11,12,13,14,16,17,18,19,20,21,23,25,26,28,29,30,35]
