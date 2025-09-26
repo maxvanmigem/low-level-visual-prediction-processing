@@ -5,5 +5,6 @@
 		}
 	],
 	"settings": {
+		"julia.environmentPath": "c:\\Users\\mvmigem\\research_projects\\low-level-predicition-v1\\julia-env"
 	}
 }

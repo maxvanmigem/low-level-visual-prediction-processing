@@ -4,7 +4,8 @@ using Effects
 using Unfold
 using PyMNE
 using StatsModels
-sub = 1
+
+sub = 2
 subject_num = lpad(sub,2,"0")
 data_path = "C:/Users/mvmigem/Documents/data/project_2/preprocessed/"
 event_path = data_path * "mastoid-raw-csv/512Hz/events/"
@@ -60,7 +61,7 @@ ch_names = pyconvert(Vector{String}, py_data.ch_names)
 eff[!,:channel] = [ch_names[num] for num in eff[!, :channel]]
 
 # Save effects and model
-destination_path = "C:/Users/mvmigem/Documents/data/project_2/overlap_corrected/64-ch/"
+destination_path = "C:/Users/mvmigem/Documents/data/project_2/overlap_corrected/main/"
 
 filename = "corrected-evoked-all-sub-$subject_num.csv"
 m_filename = "rERP-ch-all-sub-$subject_num.jld2"

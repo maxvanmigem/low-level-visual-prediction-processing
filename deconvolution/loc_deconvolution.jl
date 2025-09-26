@@ -1,16 +1,8 @@
 using Unfold
-using UnfoldSim
-using UnfoldMakie,CairoMakie
 using CSV
 using DataFrames
 using Effects
 using StatsModels
-
-el_list = ["Oz","POz","O1","O2",
-            "PO3","PO4",
-            "P1","Pz","P2",
-            "CP1","CPz","CP2",
-            ]
 
 for i in el_list
     data_path = "C:/Users/mvmigem/Documents/data/project_2/preprocessed/localiser/mastoid-raw-csv/"
