@@ -1,0 +1,75 @@
+---
+title: "Low level vs high level visual prediction processing"
+author: "Max Van Migem"
+date: "2025-10-01"
+---
+
+```{r packages}
+library(car)
+library(pbkrtest)
+library(lmerTest)
+library(lme4)
+library(optimx)
+library(performance)
+library(emmeans)
+# library(brms)
+# library(rstan)
+
+```
+## load data
+
+```{r data}
+df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/c1_amp.csv')
+```
+```{r data}
+df$subject <- as.factor(df$subject)
+df$feature <- as.factor(df$feature)
+df$attended_feature <- as.factor(df$attended_feature)
+df$unattended_feature <- as.factor(df$unattended_feature)
+df$visual_field <- as.factor(df$visual_field)
+
+options(contrasts = c("contr.sum", "contr.poly"))
+
+```
+```{r}
+f1 <- y_bc ~ 1 + feature + attended_feature + unattended_feature + visual_field +
+                feature*attended_feature*unattended_feature*visual_field + 
+                (1  + feature + attended_feature + unattended_feature + visual_field| subject)
+
+f2 <- y_bc ~ 1 + feature + attended_feature + unattended_feature + visual_field +
+                feature*attended_feature*unattended_feature*visual_field + 
+                (1  + visual_field| subject)
+
+
+
+fit1 <-  lmer(f1, data = df, control = lmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5)))
+fit2<-  lmer(f2, data = df, control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B')))
+
+confint(fit.behaviour_acc, method ="boot",nsim = 1000)
+summary(fit.behaviour_acc_2)
+contrasts(df$feature)
+contrasts(df$attended_feature)
+contrasts(df$unattended_feature)
+
+mean(df_regular$beta, na.rm = TRUE)
+sd(df_regular$beta, na.rm = TRUE)
+mean(df_odd$beta, na.rm = TRUE)
+sd(df_odd$beta, na.rm = TRUE)
+
+emmeans(fit1, pairwise ~ unattended_feature | feature)
+
+```
+```{r}
+anova(fit1,fit2)
+summary(fit1)
+summary(fit2)
+plot(fit.behaviour_acc_2)
+qqnorm(residuals(fit.behaviour_acc_2))
+bootstrap|> tidy()
+bootstrap <- PBmodcomp(fit.behaviour_acc,fit.behaviour_acc_2,nsim=1000)
+check_model(fit.behaviour_acc)
+check_model(fit.behaviour_acc_2)
+
+summary(bootstrap)
+
+```
