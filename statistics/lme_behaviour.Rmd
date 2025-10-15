@@ -45,14 +45,13 @@ df_unat_odd <- subset(df_rotation, unattended_feature == 'odd')
 
 # acc
 ```{r}
-# f1 <- dprime ~ 1 + feature + attended_feature + unattended_feature + 
-#                 feature*attended_feature*unattended_feature + 
-#                 (1 + feature + attended_feature + unattended_feature | participant)
+f1 <- dprime ~ 1 + feature + attended_feature + unattended_feature + 
+                feature*attended_feature*unattended_feature + 
+                (1 + feature + attended_feature + unattended_feature | participant)
 
 f2 <- dprime ~ 1 + feature + attended_feature + unattended_feature + 
                 feature*attended_feature*unattended_feature + 
                 (1  + feature|participant) # This one is best after bootstrapping
-
 
 # f1 <- accuracy ~ 1 + feature + attended_feature + unattended_feature + 
 #                 feature*attended_feature*unattended_feature + 
@@ -66,6 +65,7 @@ fit.behaviour_acc <-  lmer(f1, data = df, control = lmerControl(optimizer ='opti
 fit.behaviour_acc_2 <-  lmer(f2, data = df, control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B')))
 
 confint(fit.behaviour_acc, method ="boot",nsim = 1000)
+summary(fit.behaviour_acc)
 summary(fit.behaviour_acc_2)
 contrasts(df$feature)
 contrasts(df$attended_feature)

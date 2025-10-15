@@ -22,7 +22,8 @@ library(emmeans)
 # df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/p1_amp.csv')
 # df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/p2_amp.csv')
 # df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/n1_amp.csv')
-df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/p3_amp.csv')
+# df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/p3_amp.csv')
+df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/n2_amp.csv')
 ```
 ```{r data}
 df$subject <- as.factor(df$subject)
@@ -41,7 +42,7 @@ f1 <- y_bc ~ 1 + feature + attended_feature + unattended_feature  +
 
 f2 <- y_bc ~ 1 + feature + attended_feature + unattended_feature  +
                 feature*attended_feature*unattended_feature + 
-                (1  | subject) # better after bootstrap
+                (1   | subject) # better after bootstrap
 
 fit1 <-  lmer(f1, data = df, control = lmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5)))
 fit2 <-  lmer(f2, data = df, control = lmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5)))
@@ -69,7 +70,7 @@ f1 <- y_bc ~ 1 + feature + attended_feature + unattended_feature  +
 
 f2 <- y_bc ~ 1 + feature + attended_feature + unattended_feature  +
                 feature*attended_feature*unattended_feature + 
-                (1  + attended_feature | subject) # better after bootstrap
+                (1   + attended_feature  | subject) # better after bootstrap
 
 fit1 <-  lmer(f1, data = df, control = lmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5)))
 fit2 <-  lmer(f2, data = df, control = lmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5)))
@@ -97,11 +98,43 @@ f1 <- y_bc ~ 1 + feature + attended_feature + unattended_feature  +
 
 f2 <- y_bc ~ 1 + feature + attended_feature + unattended_feature  +
                 feature*attended_feature*unattended_feature + 
-                (1  + unattended_feature | subject) # better after bootstrapping
+                (1  + feature + attended_feature + unattended_feature | subject) # better after bootstrapping
 
 
 fit1 <-  lmer(f1, data = df, control = lmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5)))
 fit2 <-  lmer(f2, data = df, control = lmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5)))
+# , control = lmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5))
+# control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B'))
+
+confint(fit2, method ="boot",nsim = 1000)
+summary(fit1)
+summary(fit2)
+contrasts(df$feature)
+contrasts(df$attended_feature)
+contrasts(df$unattended_feature)
+
+mean(df_regular$beta, na.rm = TRUE)
+sd(df_regular$beta, na.rm = TRUE)
+mean(df_odd$beta, na.rm = TRUE)
+sd(df_odd$beta, na.rm = TRUE)
+
+emmeans(fit1, pairwise ~ attended_feature | feature)
+
+```
+# N2
+```{r}
+f1 <- y_bc ~ 1 + feature + attended_feature + unattended_feature  +
+                feature*attended_feature*unattended_feature + 
+                (1  + feature + attended_feature + unattended_feature | subject)
+
+f2 <- y_bc ~ 1 + feature + attended_feature + unattended_feature  +
+                feature*attended_feature*unattended_feature + 
+                (1   + unattended_feature | subject) # better after bootstrapping
+
+
+fit1 <-  lmer(f1, data = df, control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B')))
+fit2 <-  lmer(f2, data = df, control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B')))
+
 # , control = lmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5))
 # control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B'))
 
@@ -126,9 +159,10 @@ f1 <- y_bc ~ 1 + feature + attended_feature + unattended_feature  +
                 feature*attended_feature*unattended_feature + 
                 (1  + feature + attended_feature + unattended_feature | subject)
 
-f2 <- y_bc ~ 1 + feature + attended_feature + unattended_feature  +
+
+f2 <- y_bc ~ 1 + feature + attended_feature + unattended_feature +
                 feature*attended_feature*unattended_feature + 
-                (1  | subject) # better after bootstrapping
+                (1  + unattended_feature | subject) # better after bootstrapping
 
 
 fit1 <-  lmer(f1, data = df, control = lmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5)))
