@@ -1194,7 +1194,7 @@ for bl in range(n_blocks):
     displayCondInstruction(cond=block_condition[bl],key_map=key_mappings,lang=language,ang_odd=angle_odd)
     displayBlockCue(cond=block_condition[bl],rot_odd=rotation_odd,ang_odd=angle_odd,lang=language)
     cross.autoDraw = True
-    eegTriggerSend(int(253),lab=lab) # 200 is the start-recording command in the biosemi config file
+    eegTriggerSend(int(253),lab=lab) # 253 is the start-recording command in the biosemi config file
     # Trigger for block
     block_tigger = int(60 + n_blocks)
     eegTriggerSend(block_tigger,lab=lab)

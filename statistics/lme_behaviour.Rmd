@@ -22,6 +22,8 @@ library(emmeans)
 # df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/behaviour_acc.csv')
 df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/behaviour_dprime.csv')
 # df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/behaviour_rt.csv')
+# df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/behaviour_acc_trials.csv')
+# df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/behaviour_rt_trial.csv')
 
 ```
 ```{r data}
@@ -37,6 +39,13 @@ df_angle <- subset(df, feature == 'angle')
 df_rotation <- subset(df, feature == 'rotation')
 df_att_reg <- subset(df_angle, attended_feature == 'regular')
 df_att_odd <- subset(df_angle, attended_feature == 'odd')
+
+df_att_reg_y <- subset(df_att_reg, unattended_feature == 'odd')
+df_att_odd_y <- subset(df_att_odd, unattended_feature == 'odd')
+
+df_att_odd_x <- subset(df_att_reg, unattended_feature == 'odd')
+df_att_reg_x <- subset(df_att_reg, unattended_feature == 'regular')
+
 df_unat_reg <- subset(df_rotation, unattended_feature == 'regular')
 df_unat_odd <- subset(df_rotation, unattended_feature == 'odd')
 
@@ -46,17 +55,10 @@ df_unat_odd <- subset(df_rotation, unattended_feature == 'odd')
 
 # acc
 ```{r}
-f1 <- dprime ~ 1 + feature + attended_feature + unattended_feature + 
-                feature*attended_feature*unattended_feature + 
-                (1 + feature + attended_feature + unattended_feature | participant)
 
-f2 <- dprime ~ 1 + feature + attended_feature + unattended_feature + 
+f1 <- accuracy ~ 1 + feature + attended_feature + unattended_feature + 
                 feature*attended_feature*unattended_feature + 
-                (1  + feature|participant) # This one is best after bootstrapping
-
-# f1 <- accuracy ~ 1 + feature + attended_feature + unattended_feature + 
-#                 feature*attended_feature*unattended_feature + 
-#                 (1 + feature + attended_feature +unattended_feature | participant)
+                (1 + feature + attended_feature +unattended_feature | participant)
 
 f2 <- accuracy ~ 1 + feature + attended_feature + unattended_feature + 
                 feature*attended_feature*unattended_feature + 
@@ -64,6 +66,19 @@ f2 <- accuracy ~ 1 + feature + attended_feature + unattended_feature +
 
 fit.behaviour_acc <-  lmer(f1, data = df, control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B')))
 fit.behaviour_acc_2 <-  lmer(f2, data = df, control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B')))
+
+
+f1 <- acc_01 ~ 1 + feature + attended_feature + unattended_feature + 
+                feature*attended_feature*unattended_feature + 
+                (1 + feature + attended_feature +unattended_feature | participant)
+
+f2 <- acc_01 ~ 1 + feature + attended_feature + unattended_feature + 
+                feature*attended_feature*unattended_feature + 
+                (1 + feature + attended_feature | participant) # better
+
+
+fit.behaviour_acc <-  glmer(f1, data = df, family = binomial, control = glmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5)))
+fit.behaviour_acc_2 <-  glmer(f2, data = df, family = binomial, control = glmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5)))
 
 confint(fit.behaviour_acc, method ="boot",nsim = 1000)
 summary(fit.behaviour_acc)
@@ -89,6 +104,14 @@ f1 <- dprime ~ 1 + feature + unattended_feature +
 f2 <- dprime ~ 1 + feature + unattended_feature + 
                 feature*unattended_feature + 
                 (1 + feature   | participant) # better afbootstrap
+
+f1 <- beta ~ 1 + feature + unattended_feature + 
+                feature*unattended_feature + 
+                (1 + feature  + unattended_feature | participant)
+
+f2 <- beta ~ 1 + feature + unattended_feature + 
+                feature*unattended_feature + 
+                (1  | participant)
 
 
 fit.behaviour_acc <-  lmer(f1, data = df, control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B')))
@@ -116,15 +139,32 @@ f1 <- rt ~ 1 + feature + attended_feature + unattended_feature +
         feature*attended_feature*unattended_feature + 
         (1 + feature + attended_feature | participant) # dropped unattended_feature out of random eff because convergence
 
-fit.behaviour_rt <-  lmer(f1, data = df, control = lmerControl(optimizer = c("Nelder_Mead"), optCtrl=list(maxfun=2e6)))
+f2 <- rt ~ 1 + feature + attended_feature + unattended_feature + 
+        feature*attended_feature*unattended_feature + 
+        (1 + feature + attended_feature + unattended_feature | participant) # for trial level analyses
 
-confint(fit.behaviour_rt, method ="Wald")
+
+fit.behaviour_rt <-  lmer(f1, data = df, control = lmerControl(optimizer = c("Nelder_Mead"), optCtrl=list(maxfun=2e6)))
+fit.behaviour_rt2 <-  glmer(f2, family = Gamma(link = "log"), data = df, control = glmerControl(optimizer = c("bobyqa"), optCtrl=list(maxfun=2e6)))
+
+confint(fit.behaviour_rt2, method ="Wald")
 summary(fit.behaviour_rt)
+summary(fit.behaviour_rt2)
 contrasts(df$feature)
 contrasts(df$attended_feature)
 contrasts(df$unattended_feature)
-emmeans(fit.behaviour_rt, pairwise ~ attended_feature | feature)
-emmeans(fit.behaviour_rt, pairwise ~ attended_feature*unattended_feature | feature)
+emmeans(fit.behaviour_rt2, pairwise ~ attended_feature | feature)
+confint(emmeans(fit.behaviour_rt2, pairwise ~ attended_feature*unattended_feature | feature))
+
+median(df_rotation$rt, na.rm = TRUE)
+sd(df_rotation$rt, na.rm = TRUE)
+mean(df_angle$rt, na.rm = TRUE)
+sd(df_angle$rt, na.rm = TRUE)
+
+median(df_att_odd_x$rt, na.rm = TRUE)
+IQR(df_att_odd_x$rt, na.rm = TRUE)
+median(df_att_reg_x$rt, na.rm = TRUE)
+IQR(df_att_reg_x$rt, na.rm = TRUE)
 
 ```
 ```{r}
@@ -134,9 +174,10 @@ summary(fit.behaviour_acc_2)
 plot(fit.behaviour_acc_2)
 qqnorm(residuals(fit.behaviour_acc_2))
 bootstrap|> tidy()
-bootstrap <- PBmodcomp(fit.behaviour_acc,fit.behaviour_acc_2,nsim=1000)
+bootstrap <- PBmodcomp(fit.behaviour_acc,fit.behaviour_acc_2,nsim=500)
 check_model(fit.behaviour_acc)
 check_model(fit.behaviour_acc_2)
+check_model(fit.behaviour_rt2)
 
 summary(bootstrap)
 

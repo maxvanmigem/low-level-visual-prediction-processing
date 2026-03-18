@@ -20,16 +20,29 @@ library(emmeans)
 
 ```{r data}
 # df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/p1_amp.csv')
-# df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/p2_amp.csv')
 # df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/n1_amp.csv')
+df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/p2_amp.csv')
+# df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/n2_amp.csv')
 # df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/p3_amp.csv')
-df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/n2_amp.csv')
+# df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/p3a_amp.csv')
+# df <- read.csv('C:/Users/mvmigem/Documents/data/project_2/compiled_data/p3b_amp.csv')
 ```
 ```{r data}
 df$subject <- as.factor(df$subject)
 df$feature <- as.factor(df$feature)
 df$attended_feature <- as.factor(df$attended_feature)
 df$unattended_feature <- as.factor(df$unattended_feature)
+
+df$y_bc <- df$y_bc * 1e6
+
+df_angle <- subset(df, feature == 'angle')
+df_rotation <- subset(df, feature == 'rotation')
+df_att_reg_ang <- subset(df_angle, attended_feature == 'regular')
+df_att_odd_ang <- subset(df_angle, attended_feature == 'odd')
+df_att_reg <- subset(df, attended_feature == 'regular')
+df_att_odd <- subset(df, attended_feature == 'odd')
+df_unat_reg <- subset(df_rotation, unattended_feature == 'regular')
+df_unat_odd <- subset(df_rotation, unattended_feature == 'odd')
 
 options(contrasts = c("contr.sum", "contr.poly"))
 
@@ -39,6 +52,7 @@ options(contrasts = c("contr.sum", "contr.poly"))
 f1 <- y_bc ~ 1 + feature + attended_feature + unattended_feature  +
                 feature*attended_feature*unattended_feature + 
                 (1  + feature + attended_feature + unattended_feature | subject)
+
 
 f2 <- y_bc ~ 1 + feature + attended_feature + unattended_feature  +
                 feature*attended_feature*unattended_feature + 
@@ -75,17 +89,19 @@ f2 <- y_bc ~ 1 + feature + attended_feature + unattended_feature  +
 fit1 <-  lmer(f1, data = df, control = lmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5)))
 fit2 <-  lmer(f2, data = df, control = lmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5)))
 
-confint(fit1, method ="boot",nsim = 1000)
+confint(fit1, method ="Wald")
 summary(fit1)
 summary(fit2)
 contrasts(df$feature)
 contrasts(df$attended_feature)
 contrasts(df$unattended_feature)
 
-mean(df_regular$beta, na.rm = TRUE)
-sd(df_regular$beta, na.rm = TRUE)
-mean(df_odd$beta, na.rm = TRUE)
-sd(df_odd$beta, na.rm = TRUE)
+mean(df_angle$y_bc, na.rm = TRUE)
+sd(df_angle$y_bc, na.rm = TRUE)
+
+mean(df_rotation$y_bc, na.rm = TRUE)
+sd(df_rotation$y_bc, na.rm = TRUE)
+
 
 emmeans(fit1, pairwise ~ unattended_feature | feature)
 
@@ -98,7 +114,7 @@ f1 <- y_bc ~ 1 + feature + attended_feature + unattended_feature  +
 
 f2 <- y_bc ~ 1 + feature + attended_feature + unattended_feature  +
                 feature*attended_feature*unattended_feature + 
-                (1  + feature + attended_feature + unattended_feature | subject) # better after bootstrapping
+                (1  + unattended_feature | subject) # better after bootstrapping
 
 
 fit1 <-  lmer(f1, data = df, control = lmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5)))
@@ -106,19 +122,33 @@ fit2 <-  lmer(f2, data = df, control = lmerControl(optimizer ='bobyqa', optCtrl=
 # , control = lmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5))
 # control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B'))
 
-confint(fit2, method ="boot",nsim = 1000)
+confint(fit2, method ="Wald")
 summary(fit1)
 summary(fit2)
 contrasts(df$feature)
 contrasts(df$attended_feature)
 contrasts(df$unattended_feature)
 
-mean(df_regular$beta, na.rm = TRUE)
-sd(df_regular$beta, na.rm = TRUE)
-mean(df_odd$beta, na.rm = TRUE)
-sd(df_odd$beta, na.rm = TRUE)
 
-emmeans(fit1, pairwise ~ attended_feature | feature)
+mean(df_angle$y_bc, na.rm = TRUE)
+sd(df_angle$y_bc, na.rm = TRUE)
+
+mean(df_rotation$y_bc, na.rm = TRUE)
+sd(df_rotation$y_bc, na.rm = TRUE)
+
+mean(df_att_reg$y_bc, na.rm = TRUE)
+sd(df_att_reg$y_bc, na.rm = TRUE)
+
+mean(df_att_odd$y_bc, na.rm = TRUE)
+sd(df_att_odd$y_bc, na.rm = TRUE)
+
+mean(df_att_reg_ang$y_bc, na.rm = TRUE)
+sd(df_att_reg_ang$y_bc, na.rm = TRUE)
+
+mean(df_att_odd_ang$y_bc, na.rm = TRUE)
+sd(df_att_odd_ang$y_bc, na.rm = TRUE)
+
+emmeans(fit2, pairwise ~ attended_feature | feature)
 
 ```
 # N2
@@ -132,23 +162,24 @@ f2 <- y_bc ~ 1 + feature + attended_feature + unattended_feature  +
                 (1   + unattended_feature | subject) # better after bootstrapping
 
 
-fit1 <-  lmer(f1, data = df, control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B')))
+fit1 <-  lmer(f1, data = df, control = lmerControl(optimizer ='Nelder_Mead', optCtrl=list(maxfun = 1e5)))
 fit2 <-  lmer(f2, data = df, control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B')))
 
 # , control = lmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5))
 # control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B'))
 
-confint(fit2, method ="boot",nsim = 1000)
+confint(fit2, method ="Wald")
 summary(fit1)
 summary(fit2)
 contrasts(df$feature)
 contrasts(df$attended_feature)
 contrasts(df$unattended_feature)
 
-mean(df_regular$beta, na.rm = TRUE)
-sd(df_regular$beta, na.rm = TRUE)
-mean(df_odd$beta, na.rm = TRUE)
-sd(df_odd$beta, na.rm = TRUE)
+mean(df_att_reg$y_bc, na.rm = TRUE)
+sd(df_att_reg$y_bc, na.rm = TRUE)
+
+mean(df_att_odd$y_bc, na.rm = TRUE)
+sd(df_att_odd$y_bc, na.rm = TRUE)
 
 emmeans(fit1, pairwise ~ attended_feature | feature)
 
@@ -157,30 +188,30 @@ emmeans(fit1, pairwise ~ attended_feature | feature)
 ```{r}
 f1 <- y_bc ~ 1 + feature + attended_feature + unattended_feature  +
                 feature*attended_feature*unattended_feature + 
-                (1  + feature + attended_feature + unattended_feature | subject)
+                (1  + feature + attended_feature + unattended_feature | subject)# better after bootstrapping P3a
 
-
-f2 <- y_bc ~ 1 + feature + attended_feature + unattended_feature +
+f2 <- y_bc ~ 1 + feature + attended_feature + unattended_feature  +
                 feature*attended_feature*unattended_feature + 
-                (1  + unattended_feature | subject) # better after bootstrapping
+                (1  + unattended_feature | subject)# better after bootstrapping P3b
 
 
 fit1 <-  lmer(f1, data = df, control = lmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5)))
-fit2 <-  lmer(f2, data = df, control = lmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5)))
+fit2 <-  lmer(f2, data = df, control = lmerControl(optimizer ='Nelder_Mead', optCtrl=list(maxfun = 1e5)))
 # , control = lmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5))
 # control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B'))
 
-confint(fit2, method ="boot",nsim = 1000)
+confint(fit2, method ="Wald")
 summary(fit1)
 summary(fit2)
 contrasts(df$feature)
 contrasts(df$attended_feature)
 contrasts(df$unattended_feature)
 
-mean(df_regular$beta, na.rm = TRUE)
-sd(df_regular$beta, na.rm = TRUE)
-mean(df_odd$beta, na.rm = TRUE)
-sd(df_odd$beta, na.rm = TRUE)
+mean(df_att_reg$y_bc, na.rm = TRUE)
+sd(df_att_reg$y_bc, na.rm = TRUE)
+
+mean(df_att_odd$y_bc, na.rm = TRUE)
+sd(df_att_odd$y_bc, na.rm = TRUE)
 
 emmeans(fit1, pairwise ~ attended_feature | feature)
 

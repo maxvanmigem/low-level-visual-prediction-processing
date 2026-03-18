@@ -28,6 +28,11 @@ df$attended_feature <- as.factor(df$attended_feature)
 df$unattended_feature <- as.factor(df$unattended_feature)
 df$visual_field <- as.factor(df$visual_field)
 
+df$y_bc <- df$y_bc *1e6
+
+df_rotation <- subset(df, feature == 'rotation')
+df_rot_un_reg <- subset(df_rotation, unattended_feature == 'regular')
+df_rot_un_odd <- subset(df_rotation, unattended_feature == 'odd')
 options(contrasts = c("contr.sum", "contr.poly"))
 
 ```
@@ -43,20 +48,22 @@ f2 <- y_bc ~ 1 + feature + attended_feature + unattended_feature + visual_field 
 
 
 fit1 <-  lmer(f1, data = df, control = lmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5)))
-fit2<-  lmer(f2, data = df, control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B')))
+fit2 <-  lmer(f2, data = df, control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B')))
 # , control = lmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5))
 # control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B'))
-confint(fit1, method ="boot",nsim = 1000)
+confint(fit1, method ="Wald")
 summary(fit1)
 summary(fit2)
 contrasts(df$feature)
 contrasts(df$attended_feature)
 contrasts(df$unattended_feature)
 
-mean(df_regular$beta, na.rm = TRUE)
-sd(df_regular$beta, na.rm = TRUE)
-mean(df_odd$beta, na.rm = TRUE)
-sd(df_odd$beta, na.rm = TRUE)
+mean(df_rot_un_reg$y_bc, na.rm = TRUE)
+sd(df_rot_un_reg$y_bc, na.rm = TRUE)
+
+mean(df_rot_un_odd$y_bc, na.rm = TRUE)
+sd(df_rot_un_odd$y_bc, na.rm = TRUE)
+
 
 emmeans(fit1, pairwise ~ unattended_feature | feature)
 
