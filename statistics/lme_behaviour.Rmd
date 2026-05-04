@@ -80,20 +80,23 @@ f2 <- acc_01 ~ 1 + feature + attended_feature + unattended_feature +
 fit.behaviour_acc <-  glmer(f1, data = df, family = binomial, control = glmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5)))
 fit.behaviour_acc_2 <-  glmer(f2, data = df, family = binomial, control = glmerControl(optimizer ='bobyqa', optCtrl=list(maxfun = 1e5)))
 
-confint(fit.behaviour_acc, method ="boot",nsim = 1000)
+confint(fit.behaviour_acc_2, method ="Wald",nsim = 1000)
 summary(fit.behaviour_acc)
 summary(fit.behaviour_acc_2)
 contrasts(df$feature)
 contrasts(df$attended_feature)
 contrasts(df$unattended_feature)
 
-mean(df_regular$beta, na.rm = TRUE)
-sd(df_regular$beta, na.rm = TRUE)
-mean(df_odd$beta, na.rm = TRUE)
-sd(df_odd$beta, na.rm = TRUE)
+df_check = subset(df, attended_feature == 'regular')
+df_chock = subset(df, attended_feature == 'odd') 
 
-emmeans(fit.behaviour_acc_2, pairwise ~ unattended_feature | attended_feature)
+mean(df_check$accuracy, na.rm = TRUE)
+sd(df_check$accuracy, na.rm = TRUE)
+mean(df_chock$accuracy, na.rm = TRUE)
+sd(df_chock$accuracy, na.rm = TRUE)
 
+confint(emmeans(fit.behaviour_acc_2, pairwise ~ attended_feature | feature))
+emmeans(fit.behaviour_acc_2, pairwise ~ attended_feature | feature)
 ```
 # dprime
 ```{r}
@@ -111,7 +114,15 @@ f1 <- beta ~ 1 + feature + unattended_feature +
 
 f2 <- beta ~ 1 + feature + unattended_feature + 
                 feature*unattended_feature + 
-                (1  | participant)
+                (unattended_feature | participant)
+
+f1 <- c ~ 1 + feature + unattended_feature + 
+                feature*unattended_feature + 
+                (1 + feature  + unattended_feature | participant)
+
+f2 <- c ~ 1 + feature + unattended_feature + 
+                feature*unattended_feature + 
+                (1| participant)
 
 
 fit.behaviour_acc <-  lmer(f1, data = df, control = lmerControl(optimizer ='optimx', optCtrl=list(method='L-BFGS-B')))
@@ -130,7 +141,11 @@ mean(df_odd$beta, na.rm = TRUE)
 sd(df_odd$beta, na.rm = TRUE)
 
 emmeans(fit.behaviour_acc_2, pairwise ~ unattended_feature | attended_feature)
+emmeans(fit.behaviour_acc, ~ unattended_feature + feature)
+emm <- emmeans(fit.behaviour_acc_2, ~ unattended_feature + feature)
 
+# Test whether each cell mean differs from zero
+test(emm, null = 0)
 ```
 # rt
 ```{r}
@@ -174,7 +189,7 @@ summary(fit.behaviour_acc_2)
 plot(fit.behaviour_acc_2)
 qqnorm(residuals(fit.behaviour_acc_2))
 bootstrap|> tidy()
-bootstrap <- PBmodcomp(fit.behaviour_acc,fit.behaviour_acc_2,nsim=500)
+bootstrap <- PBmodcomp(fit.behaviour_acc,fit.behaviour_acc_2,nsim=1000)
 check_model(fit.behaviour_acc)
 check_model(fit.behaviour_acc_2)
 check_model(fit.behaviour_rt2)
