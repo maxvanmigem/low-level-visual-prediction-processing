@@ -4,7 +4,7 @@ import time
 
 # ── Settings ──────────────────────────────────────────
 project_id = "r3w56"
-token      = ""
+token      = "XXXX"
 local_folder = r"C:/Users/mvmigem/Documents/data/project_2/low-level-prediction"
 # ──────────────────────────────────────────────────────
 
