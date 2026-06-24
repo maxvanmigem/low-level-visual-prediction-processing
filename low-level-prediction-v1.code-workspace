@@ -3,5 +3,8 @@
 		{
 			"path": "."
 		}
-	]
+	],
+	"settings": {
+		"julia.environmentPath": "C:\\Users\\mvmigem\\.julia\\environments\\v1.12"
+	}
 }

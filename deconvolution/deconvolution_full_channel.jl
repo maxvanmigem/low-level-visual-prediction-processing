@@ -7,13 +7,13 @@ using StatsModels
 
 # Out of loop stuff
 # Save effects and model
-destination_path = "C:/Users/mvmigem/Documents/data/project_2/overlap_corrected/main/"
+destination_path = "C:/Users/mvmigem/Documents/data/project_2/overlap_corrected/new_main/"
 data_path = "C:/Users/mvmigem/Documents/data/project_2/preprocessed/"
 event_path = data_path * "mastoid-raw-csv/512Hz/events/"
 event_dir_list = readdir(event_path)
 # Basisfunction and design
 basisfunction = firbasis(τ=(-0.1,1),sfreq=512,name="myFIRbasis")
-f = @formula 0 ~ 1 + sequence + position + feature*attended_feature*unattended_feature
+f = @formula 0 ~ 1 + sequence + position*feature*attended_feature*unattended_feature
 bfDict = [Any=>(f,basisfunction)]
 
 for evp in event_dir_list
