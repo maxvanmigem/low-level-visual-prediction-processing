@@ -4,7 +4,7 @@
 
 
   # "name" of the job (optional)
-#PBS -N test_job        
+#PBS -N batch_deconvolution        
 
 
   # requested running time (required!)
