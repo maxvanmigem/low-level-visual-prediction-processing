@@ -7,8 +7,8 @@ date: "2025-10-01"
 ```{r packages}
 library(car)
 library(pbkrtest)
-library(lmerTest)
 library(lme4)
+library(lmerTest)
 library(optimx)
 library(performance)
 library(emmeans)

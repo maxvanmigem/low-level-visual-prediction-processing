@@ -6,19 +6,20 @@ using PyMNE
 using StatsModels
 
 
-# --- Get subject from Worker parameter ---
-subject_num = lpad(parse(Int, ARGS[1]), 2, "0")
 
 # --- Make paths --- 
-data_dir = ENV["VSC_DATA"]
-data_path = joinpath(data_dir, "low-level-prediction/")
-data_path = joinpath(data_dir, "low-level-prediction/")
-event_path = joinpath(data_path, "events/")
-destination_path = joinpath(data_path, "output/")
+destination_path = "C:/Users/mvmigem/Documents/data/project_2/overlap_corrected/main/"
+data_path = "C:/Users/mvmigem/Documents/data/project_2/preprocessed/"
+event_path = data_path * "mastoid-raw-csv/512Hz/events/"
+event_dir_list = readdir(event_path)
 
 mkpath(destination_path)
 
 # --- Load events ---
+# --- Get subject from Worker parameter ---
+subject = 4
+subject_num = subject_num = lpad(subject,2,"0")
+
 event_dir_list = readdir(event_path)
 evts = DataFrame(CSV.File(event_path*"events-sub-$subject_num.csv"))
 rename!(evts,:sample => :latency)
@@ -28,8 +29,8 @@ evts.sequence = string.(evts.sequence)
 evts.feature = string.(evts.feature)
 evts.attended_feature = string.(evts.attended_feature)
 evts.unattended_feature = string.(evts.unattended_feature)
-evts.visual_field = ifelse.(evts.position .∈ Ref(["3", "4"]), "down", "up")
 
+evts.visual_field = ifelse.(evts.position .∈ Ref(["3", "4"]), "down", "up")
 # --- Load .fif ---
 raw_path = data_path*"mastoid-raw/clean-mastoid-$subject_num-raw.fif"
 py_data = PyMNE.io.read_raw_fif(raw_path, preload=true)
@@ -38,7 +39,8 @@ data = Array(PyArray(data))
 
 # --- Basis, formula, contrasts ---
 basisfunction = firbasis(τ=(-0.1,1),sfreq=512,name="myFIRbasis")
-f = @formula 0 ~ 1 + sequence + visual_field*feature*attended_feature*unattended_feature
+f = @formula 0 ~ 1 + sequence + position*feature*attended_feature*unattended_feature
+# f = @formula 0 ~ 1 + condition + continuous # note the formulas left side is `0 ~ ` for technical reasons`
 bfDict = [Any=>(f,basisfunction)]
 
 # Specify contrasts
@@ -59,7 +61,7 @@ setdown = string(evts[1,:setdown])
         
 design = Dict(
         :sequence           =>["1","2","3","4"],
-        :visual_field       => ["up","down"],
+        :position           => ["1","2","3","4"],
         :feature            => ["angle","rotation"],
         :attended_feature   => ["regular","odd"],
         :unattended_feature => ["regular","odd"]
@@ -77,5 +79,4 @@ filename = "corrected-evoked-all-sub-$subject_num.csv"
 m_filename = "rERP-ch-all-sub-$subject_num.jld2"
 CSV.write(destination_path*filename, eff)
 save(joinpath(destination_path, m_filename), m; compress = true);
-
 
